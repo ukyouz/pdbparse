@@ -25,3 +25,8 @@ Currently, there is support for Microsoft PDB version 7 files (Vista and most Wi
 ## Requirements
 
 The open-source library [Construct](http://construct.wikispaces.com/) is used to perform the low-level parsing, and is required to run the code. 
+
+## References
+
+- [microsoft/microsoft-pdb](https://github.com/microsoft/microsoft-pdb)
+- [The PDB File Format ? LLVM 9 documentation](https://releases.llvm.org/9.0.0/docs/PDB/index.html#introduction)
