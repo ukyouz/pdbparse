@@ -142,7 +142,7 @@ class TpiStream(Stream):
         "hashAdjBufferLength" / Int32ul,
     )
 
-    @property
+    @cached_property
     def structs(self) -> dict[str, StructRecord]:
         """ return dict of {structname: idx} """
         types = getattr(self, "types", {})
@@ -310,10 +310,9 @@ class TpiStream(Stream):
             if recursive or _depth == 0:
                 for i in range(count):
                     off = i * tpi.get_size(lf.elemTypeRef)
-                    if recursive:
-                        elem_s = self.form_structs(lf.elemTypeRef, addr + off, recursive, _depth+1)
-                        elem_s["levelname"] = "[%d]" % i
-                        struct["fields"].append(elem_s)
+                    elem_s = self.form_structs(lf.elemTypeRef, addr + off, recursive, _depth+1)
+                    elem_s["levelname"] = "[%d]" % i
+                    struct["fields"].append(elem_s)
             return struct
 
         elif lf.leafKind == tpi.eLeafKind.LF_MEMBER:
