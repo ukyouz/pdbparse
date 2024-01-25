@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+from construct import Array
 from construct import BitsInteger
 from construct import BitStruct
 from construct import Bytes
@@ -33,7 +34,8 @@ from construct import Switch
 from construct import Union
 
 TypRefAttrs = {
-    # "LF_ARGLIST": ["arg_type"],
+    "LF_ARGLIST": ["args"],
+    "LF_PROCEDURE": ["rvtype", "arglist"],
     "LF_ARRAY": ["elemType", "idxType"],
     "LF_ARRAY_ST": ["elemType", "idxType"],
     "LF_BITFIELD": ["baseType"],
@@ -43,7 +45,6 @@ TypRefAttrs = {
     # "LF_MFUNCTION": ["return_type", "class_type", "this_type", "arglist"],
     "LF_MODIFIER": ["modifiedType"],
     "LF_POINTER": ["utype"],
-    # "LF_PROCEDURE": ["return_type", "arglist"],
     "LF_STRUCTURE": ["fields", "derived", "vshape"],
     "LF_STRUCTURE_ST": ["fields", "derived", "vshape"],
     "LF_UNION": ["fields"],
@@ -111,6 +112,7 @@ eBaseTypes = {
     0x0103: BasicType("T_PVOID", 4, is_ptr=True),
 
     0x0403: BasicType("T_32PVOID", 4, is_ptr=True),
+    0x0408: BasicType("LF_METHOD_16t", 4, is_ptr=False),
     0x0411: BasicType("T_32PSHORT", 4, is_ptr=True),
     0x0412: BasicType("T_32PLONG", 4, is_ptr=True),
     0x0413: BasicType("T_32PQUAD", 4, is_ptr=True),
@@ -624,6 +626,19 @@ lfPointer = Struct(
     ),
 )
 
+lfProcedure = Struct(
+    "rvtype" / IntIndex,
+    "calltype" / Int8ub,
+    "funcattr" / Int8ub,
+    "parmcount" / Int16ul, # number of parameters
+    "arglist" / IntIndex,
+)
+
+lfArgList = Struct(
+    "count" / Int32ul,
+    "args" / Array(lambda ctx: ctx.count, IntIndex)
+)
+
 sTypType = Struct(
     "length" / Int16ul,
     "leafKind" / eLeafKind,
@@ -643,6 +658,8 @@ sTypType = Struct(
                 "LF_UNION": lfUnion,
                 "LF_UNION_ST": lfUnionST,
                 "LF_POINTER": lfPointer,
+                "LF_PROCEDURE": lfProcedure,
+                "LF_ARGLIST": lfArgList,
             },
             default = Pass,
         ),
@@ -690,6 +707,7 @@ def arr_dims(lf):
 
 
 def get_tpname(lf):
+    """return type string"""
     if isinstance(lf, BasicType):
         return str(lf)
     elif lf.leafKind in {
@@ -697,13 +715,18 @@ def get_tpname(lf):
         eLeafKind.LF_STRUCTURE_ST,
         eLeafKind.LF_UNION,
         eLeafKind.LF_UNION_ST,
-        eLeafKind.LF_ENUM,
     }:
         return lf.name
     elif lf.leafKind == eLeafKind.LF_POINTER:
+        if lf.utypeRef.leafKind == eLeafKind.LF_PROCEDURE:
+            return get_tpname(lf.utypeRef)
         return "(%s *)" % get_tpname(lf.utypeRef)
-    # elif lf.leafKind == eLeafKind.LF_PROCEDURE:
-    #     return proc_str(lf)
+    elif lf.leafKind == eLeafKind.LF_ENUM:
+        return str(lf.leafKind)
+    elif lf.leafKind == eLeafKind.LF_PROCEDURE:
+        rtntype = get_tpname(lf.rvtypeRef)
+        args = [get_tpname(x) for x in lf.arglistRef.args]
+        return "%s (*)(%s)" % (rtntype, ", ".join(args))
     # elif lf.leafKind == eLeafKind.LF_MODIFIER:
     #     return mod_str(lf)
     elif lf.leafKind == eLeafKind.LF_ARRAY:
