@@ -91,19 +91,21 @@ class PdbStream(Stream):
 
 class StructRecord(TypedDict):
     levelname: str
-    val: int
+    value: int | None
     type: str
     address: int
     size: int
-    bitoff: int
-    bitsize: int
-    fields: list
+    bitoff: int | None
+    bitsize: int | None
+    fields: int | None
+    is_pointer: bool
+    lf: Struct | None
 
 
 def new_struct(**kwargs):
     s = StructRecord(
         levelname="",
-        value=0,
+        value=None,
         type="",
         address=0,
         size=0,
@@ -111,6 +113,7 @@ def new_struct(**kwargs):
         bitsize=None,
         fields=None,
         is_pointer=False,
+        lf=None,
     )
     s.update(**kwargs)
     return s
@@ -154,37 +157,53 @@ class TpiStream(Stream):
             }
         }
 
+    def get_type_lf(self, ref: int):
+        if ref < self.header.typeIndexBegin:
+            try:
+                return tpi.eBaseTypes[ref]
+            except KeyError:
+                print("Unknown Base Type %s" % hex(ref))
+                raise KeyError
+        elif ref >= self.header.typeIndexBegin:
+            return self.types[ref]
+
     def _resolve_refs(self, lf, inside_fields: bool=False):
         ref_fields = tpi.FieldsRefAttrs if inside_fields else tpi.TypRefAttrs
 
         for attr in ref_fields.get(lf.leafKind, []):
             ref = lf[attr]
             if isinstance(ref, int):
-                if ref < self.header.typeIndexBegin:
-                    try:
-                        setattr(lf, attr + "Ref", tpi.eBaseTypes[ref])
-                    except KeyError:
-                        print("Unknown Base Type %s" % hex(ref))
-                elif ref >= self.header.typeIndexBegin:
-                    with suppress(KeyError):
-                        setattr(lf, attr + "Ref", self.types[ref])
+                with suppress(KeyError):
+                    setattr(lf, attr + "Ref", self.get_type_lf(ref))
             elif isinstance(ref, list):
-                raise NotImplemented(ref)
+                for i, x in enumerate(ref):
+                    if isinstance(x, int):
+                        with suppress(KeyError):
+                            ref[i] = self.get_type_lf(x)
+                    else:
+                        raise NotImplementedError(ref)
 
     def _foward_refs(self, lf, fwdref_map, inside_fields: bool=False):
         ref_fields = tpi.FieldsRefAttrs if inside_fields else tpi.TypRefAttrs
 
+        def get_ref(ref: int):
+            if ref < self.header.typeIndexBegin:
+                return fwdref_map[ref]
+            elif ref >= self.header.typeIndexBegin:
+                return fwdref_map[ref]
+
         for attr in ref_fields.get(lf.leafKind, []):
             ref = lf[attr]
             if isinstance(ref, int):
-                if ref < self.header.typeIndexBegin:
-                    with suppress(KeyError):
-                        setattr(lf, attr, fwdref_map[ref])
-                elif ref >= self.header.typeIndexBegin:
-                    with suppress(KeyError):
-                        setattr(lf, attr, fwdref_map[ref])
+                with suppress(KeyError):
+                    setattr(lf, attr, get_ref(ref))
             elif isinstance(ref, list):
-                raise NotImplemented(ref)
+                for i, x in enumerate(ref):
+                    if isinstance(x, int):
+                        with suppress(KeyError):
+                            ref[i] = get_ref(x)
+                    else:
+                        raise NotImplementedError(ref)
 
     def load_body(self, fp):
         data = self.getbodydata(fp)
@@ -245,13 +264,14 @@ class TpiStream(Stream):
             else:
                 self._resolve_refs(t, inside_fields=False)
 
-    def form_structs(self, lf, addr=0) -> StructRecord:
+    def form_structs(self, lf, addr=0, recursive=True, _depth=0) -> StructRecord:
         if isinstance(lf, tpi.BasicType):
             return new_struct(
                 levelname=lf.name,
-                type = str(lf),
+                type = tpi.get_tpname(lf),
                 address = addr,
                 size = tpi.get_size(lf),
+                lf=lf,
             )
         elif lf.leafKind in {
             tpi.eLeafKind.LF_STRUCTURE,
@@ -261,17 +281,19 @@ class TpiStream(Stream):
         }:
             struct = new_struct(
                 levelname="",
-                type=lf.name,
+                type=tpi.get_tpname(lf),
                 address = addr,
                 size = tpi.get_size(lf),
                 fields={},
+                lf=lf,
             )
-            for member in lf.fieldsRef.fields:
-                mem_struct = self.form_structs(member, addr)
-                if mem_struct is None:
-                    continue
-                mem_struct["levelname"] = member.name
-                struct["fields"][member.name] = mem_struct
+            if recursive or _depth == 0:
+                for member in lf.fieldsRef.fields:
+                    mem_struct = self.form_structs(member, addr, recursive, _depth+1)
+                    if mem_struct is None:
+                        continue
+                    mem_struct["levelname"] = member.name
+                    struct["fields"][member.name] = mem_struct
             return struct
 
         elif lf.leafKind == tpi.eLeafKind.LF_ARRAY:
@@ -283,16 +305,19 @@ class TpiStream(Stream):
                 address = addr,
                 size = tpi.get_size(lf),
                 fields = [],
+                lf=lf,
             )
-            for i in range(count):
-                off = i * tpi.get_size(lf.elemTypeRef)
-                elem_s = self.form_structs(lf.elemTypeRef, addr=addr + off)
-                elem_s["levelname"] = "[%d]" % i
-                struct["fields"].append(elem_s)
+            if recursive or _depth == 0:
+                for i in range(count):
+                    off = i * tpi.get_size(lf.elemTypeRef)
+                    if recursive:
+                        elem_s = self.form_structs(lf.elemTypeRef, addr + off, recursive, _depth+1)
+                        elem_s["levelname"] = "[%d]" % i
+                        struct["fields"].append(elem_s)
             return struct
 
         elif lf.leafKind == tpi.eLeafKind.LF_MEMBER:
-            struct = self.form_structs(lf.typeRef, addr=addr+lf.offset)
+            struct = self.form_structs(lf.typeRef, addr+lf.offset, recursive, _depth)
             struct["levelname"] = lf.name
             return struct
 
@@ -306,30 +331,33 @@ class TpiStream(Stream):
         elif lf.leafKind == tpi.eLeafKind.LF_BITFIELD:
             return new_struct(
                 levelname = "",
-                type = str(lf.leafKind),
+                type = tpi.get_tpname(lf),
                 address=addr,
                 size=tpi.get_size(lf),
                 bitoff=lf.position,
                 bitsize=lf.length,
+                lf=lf,
             )
 
         elif lf.leafKind == tpi.eLeafKind.LF_ENUM:
             return new_struct(
                 levelname = lf.name,
-                type = str(lf.leafKind),
+                type = tpi.get_tpname(lf),
                 address = addr,
                 size = tpi.get_size(lf), #?
                 fields = [], #?
+                lf=lf,
             )
 
         elif lf.leafKind == tpi.eLeafKind.LF_POINTER:
             return new_struct(
                 levelname = "",
-                type = "%s *" % (lf.utypeRef.name),
+                type = tpi.get_tpname(lf),
                 address = addr,
                 size = tpi.get_size(lf),
                 fields = None,
-                is_pointer=True,
+                is_pointer=lf.utypeRef.leafKind != tpi.eLeafKind.LF_PROCEDURE,
+                lf=lf,
             )
 
         else:
