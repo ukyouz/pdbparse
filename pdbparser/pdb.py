@@ -145,7 +145,7 @@ class TpiStream(Stream):
     @cached_property
     def structs(self) -> dict[str, StructRecord]:
         """ return dict of {structname: idx} """
-        types = getattr(self, "types", {})
+        types = getattr(self, "_types", {})
         return {
             t.name: t
             for t in types.values()
@@ -166,7 +166,7 @@ class TpiStream(Stream):
                 print("Unknown Base Type %s" % hex(ref))
                 raise KeyError
         elif ref >= self.header.typeIndexBegin:
-            return self.types[ref]
+            return self._types[ref]
 
     def _resolve_refs(self, lf, inside_fields: bool=False):
         ref_fields = tpi.FieldsRefAttrs if inside_fields else tpi.TypRefAttrs
@@ -231,7 +231,7 @@ class TpiStream(Stream):
                     tpi.insert_field_of_raw(f)
             else:
                 tpi.insert_field_of_raw(t)
-        self.types = type_dict
+        self._types = type_dict
 
         ## eliminate fwdrefs
         # Get list of fwdrefs
