@@ -97,7 +97,7 @@ class StructRecord(TypedDict):
     size: int
     bitoff: int | None
     bitsize: int | None
-    fields: int | None
+    fields: list[dict] | dict | None
     is_pointer: bool
     lf: Struct | None
 
@@ -150,6 +150,7 @@ class TpiStream(Stream):
             t.name: t
             for t in types.values()
             if t.leafKind in {
+                tpi.eLeafKind.LF_CLASS,
                 tpi.eLeafKind.LF_STRUCTURE,
                 tpi.eLeafKind.LF_STRUCTURE_ST,
                 tpi.eLeafKind.LF_UNION,
@@ -274,6 +275,7 @@ class TpiStream(Stream):
                 lf=lf,
             )
         elif lf.leafKind in {
+            tpi.eLeafKind.LF_CLASS,
             tpi.eLeafKind.LF_STRUCTURE,
             tpi.eLeafKind.LF_STRUCTURE_ST,
             tpi.eLeafKind.LF_UNION,

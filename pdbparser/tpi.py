@@ -39,7 +39,7 @@ TypRefAttrs = {
     "LF_ARRAY": ["elemType", "idxType"],
     "LF_ARRAY_ST": ["elemType", "idxType"],
     "LF_BITFIELD": ["baseType"],
-    # "LF_CLASS": ["fields", "derived", "vshape"],
+    "LF_CLASS": ["fields", "derived", "vshape"],
     "LF_ENUM": ["utype", "fields"],
     "LF_FIELDLIST": [],
     # "LF_MFUNCTION": ["return_type", "class_type", "this_type", "arglist"],
@@ -653,6 +653,7 @@ sTypType = Struct(
                 "LF_BITFIELD": lfBitfield,
                 "LF_ENUM": lfEnum,
                 "LF_FIELDLIST": lfFieldList,
+                "LF_CLASS": lfStructure,
                 "LF_STRUCTURE": lfStructure,
                 "LF_STRUCTURE_ST": lfStructureST,
                 "LF_UNION": lfUnion,
@@ -684,6 +685,7 @@ def get_size(lf):
     if isinstance(lf, BasicType):
         return lf.size
     elif lf.leafKind in {
+        eLeafKind.LF_CLASS,
         eLeafKind.LF_STRUCTURE,
         eLeafKind.LF_STRUCTURE_ST,
         eLeafKind.LF_UNION,
@@ -711,6 +713,7 @@ def get_tpname(lf):
     if isinstance(lf, BasicType):
         return str(lf)
     elif lf.leafKind in {
+        eLeafKind.LF_CLASS,
         eLeafKind.LF_STRUCTURE,
         eLeafKind.LF_STRUCTURE_ST,
         eLeafKind.LF_UNION,
