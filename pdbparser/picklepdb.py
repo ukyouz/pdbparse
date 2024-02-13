@@ -30,6 +30,11 @@ def convert_pdbs(pdb_files: list[str], out_dir: str):
     return True
 
 
+# https://github.com/pyinstaller/pyinstaller/wiki/Recipe-Multiprocessing
+# must after the function you want to run in multiprocess
+multiprocessing.freeze_support()
+
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
     p = ArgumentParser()
