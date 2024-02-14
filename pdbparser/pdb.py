@@ -272,6 +272,7 @@ class TpiStream(Stream):
                 type = tpi.get_tpname(lf),
                 address = addr,
                 size = tpi.get_size(lf),
+                is_pointer=lf.is_ptr,
                 lf=lf,
             )
         elif lf.leafKind in {
