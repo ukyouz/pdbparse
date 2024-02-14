@@ -6,7 +6,7 @@ from dataclasses import field
 from datetime import datetime
 from functools import cached_property
 from io import BytesIO
-from typing import TypedDict
+from typing import Self, TypedDict
 
 from construct import Array
 from construct import Bytes
@@ -97,7 +97,7 @@ class StructRecord(TypedDict):
     size: int
     bitoff: int | None
     bitsize: int | None
-    fields: list[dict] | dict | None
+    fields: list[Self] | dict[str, Self] | None
     is_pointer: bool
     lf: Struct | None
 
