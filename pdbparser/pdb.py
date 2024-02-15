@@ -168,6 +168,12 @@ class TpiStream(Stream):
         elif ref >= self.header.typeIndexBegin:
             return self._types[ref]
 
+    def get_type_lf_from_name(self, ref: str):
+        for lf in tpi.eBaseTypes.values():
+            if lf.name == ref:
+                return lf
+        return self.structs[ref]
+
     def _resolve_refs(self, lf, inside_fields: bool=False):
         ref_fields = tpi.FieldsRefAttrs if inside_fields else tpi.TypRefAttrs
 

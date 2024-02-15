@@ -1,4 +1,5 @@
 from typing import NamedTuple
+from typing import Self
 
 from construct import Array
 from construct import BitsInteger
@@ -79,6 +80,7 @@ class BasicType(NamedTuple):
     size: int = 0
     has_sign: bool = False
     is_ptr: bool = False
+    utypeRef: Self | None = None
     # fields: list = []
 
     def __str__(self) -> str:
@@ -108,30 +110,31 @@ eBaseTypes = {
     0x0077: BasicType("T_UINT8", 8),
     0x007A: BasicType("T_CHAR16", 2),
     0x007B: BasicType("T_CHAR32", 4),
-
-    0x0103: BasicType("T_PVOID", 4, is_ptr=True),
-
-    0x0403: BasicType("T_32PVOID", 4, is_ptr=True),
-    0x0408: BasicType("LF_METHOD_16t", 4, is_ptr=False),
-    0x0411: BasicType("T_32PSHORT", 4, is_ptr=True),
-    0x0412: BasicType("T_32PLONG", 4, is_ptr=True),
-    0x0413: BasicType("T_32PQUAD", 4, is_ptr=True),
-    0x0420: BasicType("T_32PUCHAR", 4, is_ptr=True),
-    0x0421: BasicType("T_32PUSHORT", 4, is_ptr=True),
-    0x0422: BasicType("T_32PULONG", 4, is_ptr=True),
-    0x0423: BasicType("T_32PUQUAD", 4, is_ptr=True),
-    0x0430: BasicType("T_32PBOOL08", 4, is_ptr=True),
-    0x0440: BasicType("T_32PREAL32", 4, is_ptr=True),
-    0x0441: BasicType("T_32PREAL64", 4, is_ptr=True),
-    0x0470: BasicType("T_32PRCHAR", 4, is_ptr=True),
-    0x0471: BasicType("T_32PWCHAR", 4, is_ptr=True),
-    0x0474: BasicType("T_32PINT4", 4, is_ptr=True),
-    0x0475: BasicType("T_32PUINT4", 4, is_ptr=True),
-    0x047A: BasicType("T_32PCHAR16", 4, is_ptr=True),
-    0x047B: BasicType("T_32PCHAR32", 4, is_ptr=True),
-
-    0x0603: BasicType("T_64PVOID", 8, is_ptr=True),
 }
+eBaseTypes.update({
+    0x0103: BasicType("T_PVOID", 4, is_ptr=True, utypeRef=eBaseTypes[0x03]),
+
+    0x0403: BasicType("T_32PVOID", 4, is_ptr=True, utypeRef=eBaseTypes[0x03]),
+    0x0408: BasicType("LF_METHOD_16t", 4, is_ptr=True, utypeRef=eBaseTypes[0x08]),
+    0x0411: BasicType("T_32PSHORT", 4, is_ptr=True, utypeRef=eBaseTypes[0x11]),
+    0x0412: BasicType("T_32PLONG", 4, is_ptr=True, utypeRef=eBaseTypes[0x12]),
+    0x0413: BasicType("T_32PQUAD", 4, is_ptr=True, utypeRef=eBaseTypes[0x13]),
+    0x0420: BasicType("T_32PUCHAR", 4, is_ptr=True, utypeRef=eBaseTypes[0x20]),
+    0x0421: BasicType("T_32PUSHORT", 4, is_ptr=True, utypeRef=eBaseTypes[0x21]),
+    0x0422: BasicType("T_32PULONG", 4, is_ptr=True, utypeRef=eBaseTypes[0x22]),
+    0x0423: BasicType("T_32PUQUAD", 4, is_ptr=True, utypeRef=eBaseTypes[0x23]),
+    0x0430: BasicType("T_32PBOOL08", 4, is_ptr=True, utypeRef=eBaseTypes[0x30]),
+    0x0440: BasicType("T_32PREAL32", 4, is_ptr=True, utypeRef=eBaseTypes[0x40]),
+    0x0441: BasicType("T_32PREAL64", 4, is_ptr=True, utypeRef=eBaseTypes[0x41]),
+    0x0470: BasicType("T_32PRCHAR", 4, is_ptr=True, utypeRef=eBaseTypes[0x70]),
+    0x0471: BasicType("T_32PWCHAR", 4, is_ptr=True, utypeRef=eBaseTypes[0x71]),
+    0x0474: BasicType("T_32PINT4", 4, is_ptr=True, utypeRef=eBaseTypes[0x74]),
+    0x0475: BasicType("T_32PUINT4", 4, is_ptr=True, utypeRef=eBaseTypes[0x75]),
+    0x047A: BasicType("T_32PCHAR16", 4, is_ptr=True, utypeRef=eBaseTypes[0x7A]),
+    0x047B: BasicType("T_32PCHAR32", 4, is_ptr=True, utypeRef=eBaseTypes[0x7B]),
+
+    0x0603: BasicType("T_64PVOID", 8, is_ptr=True, utypeRef=eBaseTypes[0x03]),
+})
 
 
 # Fewer than 255 values so we're ok here
