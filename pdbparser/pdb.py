@@ -99,6 +99,7 @@ class StructRecord(TypedDict):
     bitsize: int | None
     fields: list[Self] | dict[str, Self] | None
     is_pointer: bool
+    has_sign: bool
     lf: Struct | None
 
 
@@ -113,6 +114,7 @@ def new_struct(**kwargs):
         bitsize=None,
         fields=None,
         is_pointer=False,
+        has_sign=False,
         lf=None,
     )
     s.update(**kwargs)
@@ -279,6 +281,7 @@ class TpiStream(Stream):
                 address = addr,
                 size = tpi.get_size(lf),
                 is_pointer=lf.is_ptr,
+                has_sign=lf.has_sign,
                 lf=lf,
             )
         elif lf.leafKind in {
