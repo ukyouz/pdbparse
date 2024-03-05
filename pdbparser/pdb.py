@@ -160,7 +160,7 @@ class TpiStream(Stream):
             }
         }
 
-    def get_type_lf(self, ref: int):
+    def get_type_lf_from_id(self, ref: int):
         if ref < self.header.typeIndexBegin:
             try:
                 return tpi.eBaseTypes[ref]
@@ -183,12 +183,12 @@ class TpiStream(Stream):
             ref = lf[attr]
             if isinstance(ref, int):
                 with suppress(KeyError):
-                    setattr(lf, attr + "Ref", self.get_type_lf(ref))
+                    setattr(lf, attr + "Ref", self.get_type_lf_from_id(ref))
             elif isinstance(ref, list):
                 for i, x in enumerate(ref):
                     if isinstance(x, int):
                         with suppress(KeyError):
-                            ref[i] = self.get_type_lf(x)
+                            ref[i] = self.get_type_lf_from_id(x)
                     else:
                         raise NotImplementedError(ref)
 
@@ -272,6 +272,12 @@ class TpiStream(Stream):
                     self._resolve_refs(f, inside_fields=True)
             else:
                 self._resolve_refs(t, inside_fields=False)
+
+    def deref_pointer(self, lf, addr, recursive=True) -> StructRecord:
+        if not hasattr(lf, "utypeRef"):
+            raise ValueError("Shall be a pointer type, got: %r" % lf.name)
+        struct = lf.utypeRef
+        return self.form_structs(struct, addr, recursive)
 
     def form_structs(self, lf, addr=0, recursive=True, _depth=0) -> StructRecord:
         if isinstance(lf, tpi.BasicType):
@@ -485,6 +491,22 @@ class GlobalSymbolStream(Stream):
                 except AttributeError:
                     breakpoint()
 
+    def get_gvar_info(self, ref: str):
+        glb_info = None
+        with suppress(AttributeError, KeyError):
+            glb_info = self.s_gdata32[ref]
+        with suppress(AttributeError,KeyError):
+            glb_info = self.s_ldata32[ref]
+        return glb_info
+
+    def get_user_define_typeid(self, ref: str) -> int:
+        try:
+            return self._pdb.glb_stream.s_udt[ref]
+        except AttributeError:
+            return None
+        except KeyError:
+            return None
+
 
 class SectionStream(Stream):
     def load_body(self, fp):
@@ -516,6 +538,11 @@ U32_SZ = 4
 
 def div_ceil(x, y):
     return (x + y - 1) // y
+
+
+class DummyOmap:
+    def remap(self, addr):
+        return addr
 
 
 class PDB7:
@@ -587,6 +614,27 @@ class PDB7:
             s.load_body(fp)
 
         self.streams = _streams
+
+    @property
+    def tpi_stream(self) -> TpiStream:
+        return self.streams[2]
+
+    @property
+    def glb_stream(self) -> GlobalSymbolStream:
+        dbi = self.streams[3]
+        return self.streams[dbi.header.symrecStream]
+
+    def remap_global_address(self, section: int, offset: int) -> int:
+        dbi = self.streams[3]
+        # remap global address
+        try:
+            sects = self.streams[dbi.dbgheader.snSectionHdrOrig].sections
+            omap = self.streams[dbi.dbgheader.snOmapFromSrc]
+        except AttributeError:
+            sects = self.streams[dbi.dbgheader.snSectionHdr].sections
+            omap = DummyOmap()
+        section_offset = sects[section - 1].VirtualAddress
+        return omap.remap(offset + section_offset)
 
 
 def parse(filename) -> PDB7:
