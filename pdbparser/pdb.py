@@ -278,6 +278,8 @@ class TpiStream(Stream):
         if not hasattr(lf, "utypeRef"):
             raise ValueError("Shall be a pointer type, got: %r" % lf.name)
         struct = lf.utypeRef
+        if struct is None:
+            raise ValueError("Shall be a pointer type, got: %r" % lf.name)
         return self.form_structs(struct, addr, recursive)
 
     def form_structs(self, lf, addr=0, recursive=True, _depth=0) -> StructRecord:
@@ -636,6 +638,21 @@ class PDB7:
             omap = DummyOmap()
         section_offset = sects[section - 1].VirtualAddress
         return omap.remap(offset + section_offset)
+
+    def get_type_lf_from_name(self, structname: str) -> tuple:
+        glb_info = self.glb_stream.get_gvar_info(structname)
+        udt_id = self.glb_stream.get_user_define_typeid(structname)
+        var_offset = 0
+        lf = None
+        if glb_info:
+            var_offset += self.remap_global_address(glb_info.section, glb_info.offset)
+            lf = self.tpi_stream.get_type_lf_from_id(glb_info.typind)
+        elif udt_id:
+            lf = self.tpi_stream.get_type_lf_from_id(udt_id)
+        else:
+            with suppress(KeyError):
+                lf = self.tpi_stream.get_type_lf_from_name(structname)
+        return lf, var_offset
 
 
 def parse(filename) -> PDB7:
