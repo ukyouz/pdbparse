@@ -27,6 +27,7 @@ _strarray = "names" / GreedyRange(CString(encoding = "utf8"))
 
 
 # ref: https://llvm.org/docs/PDB/MsfFile.html#file-layout
+# ref: https://auscitte.github.io/posts/Func-Prototypes-With-Pdbparse
 
 _PDB7_SIGNATURE = b"Microsoft C/C++ MSF 7.00\r\n\x1ADS\0\0\0"
 
