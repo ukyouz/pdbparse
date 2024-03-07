@@ -494,7 +494,7 @@ class GlobalSymbolStream(Stream):
                 except AttributeError:
                     breakpoint()
 
-    def get_gvar_info(self, ref: str):
+    def get_gvar_info(self, ref: str) -> Struct | None:
         glb_info = None
         with suppress(AttributeError, KeyError):
             glb_info = self.s_gdata32[ref]
@@ -502,9 +502,9 @@ class GlobalSymbolStream(Stream):
             glb_info = self.s_ldata32[ref]
         return glb_info
 
-    def get_user_define_typeid(self, ref: str) -> int:
+    def get_user_define_typeid(self, ref: str) -> int | None:
         try:
-            return self._pdb.glb_stream.s_udt[ref]
+            return self.s_udt[ref].typind
         except AttributeError:
             return None
         except KeyError:
