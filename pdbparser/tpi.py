@@ -999,10 +999,11 @@ def get_size(lf):
         return 4  # FIXME not sure ??
     elif lf.leafKind == eLeafKind.LF_BITFIELD:
         return lf.baseTypeRef.size
-    # elif lf.leafKind == eLeafKind.LF_MODIFIER:
-        # return get_size(lf.modified_type)
+    elif lf.leafKind == eLeafKind.LF_MODIFIER:
+        return get_size(lf.modifiedType)
     else:
         return -1
+
 
 def arr_dims(lf):
     assert lf.leafKind == eLeafKind.LF_ARRAY
@@ -1023,22 +1024,28 @@ def get_tpname(lf):
     elif lf.leafKind == eLeafKind.LF_POINTER:
         if lf.utypeRef.leafKind == eLeafKind.LF_PROCEDURE:
             return get_tpname(lf.utypeRef)
-        return "(%s *)" % get_tpname(lf.utypeRef)
+        return "%s *" % get_tpname(lf.utypeRef)
     elif lf.leafKind == eLeafKind.LF_ENUM:
         return str(lf.leafKind)
     elif lf.leafKind == eLeafKind.LF_PROCEDURE:
         rtntype = get_tpname(lf.rvtypeRef)
         args = [get_tpname(x) for x in lf.arglistRef.args]
         return "%s (*)(%s)" % (rtntype, ", ".join(args))
-    # elif lf.leafKind == eLeafKind.LF_MODIFIER:
-        # return mod_str(lf)
+    elif lf.leafKind == eLeafKind.LF_MODIFIER:
+        tpname = get_tpname(lf.modifiedTypeRef)
+        modifiers = [m for m in ["const", "unaligned", "volatile"] if lf.modifier[m]]
+        return "%s %s" % (" ".join(modifiers), tpname)
     elif lf.leafKind == eLeafKind.LF_ARRAY:
         dims = []
         item_lf = lf
         while getattr(item_lf, "leafKind", None) == eLeafKind.LF_ARRAY:
             dims.append(get_size(item_lf) // get_size(item_lf.elemTypeRef))
             item_lf = item_lf.elemTypeRef
-        return "%s%s" % (get_tpname(item_lf), "".join(["[%d]" % d for d in dims]))
+        structname = get_tpname(item_lf)
+        if structname.endswith("*"):
+            return "(%s)%s" % (structname, "".join(["[%d]" % d for d in dims]))
+        else:
+            return "%s%s" % (structname, "".join(["[%d]" % d for d in dims]))
     elif lf.leafKind == eLeafKind.LF_BITFIELD:
         return str(lf.leafKind)
     else:

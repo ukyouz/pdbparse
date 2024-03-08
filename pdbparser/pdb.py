@@ -380,6 +380,8 @@ class TpiStream(Stream):
                 lf=lf,
             )
 
+        elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
+            return self.form_structs(lf.modifiedTypeRef)
         else:
             raise NotImplementedError(lf)
 
