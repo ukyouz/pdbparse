@@ -10,18 +10,23 @@ from typing import Self, TypedDict
 
 from construct import Array
 from construct import Bytes
+from construct import BitStruct
 from construct import Const
 from construct import Container
 from construct import CString
 from construct import Enum
+from construct import Flag
 from construct import GreedyRange
+from construct import Int8ul
 from construct import Int16sl
 from construct import Int16ul
 from construct import Int32ul
+from construct import Int32sl
 from construct import Padding
 from construct import Struct
 
 from . import tpi
+from . import dbi
 
 _strarray = "names" / GreedyRange(CString(encoding = "utf8"))
 
@@ -386,6 +391,10 @@ class TpiStream(Stream):
             raise NotImplementedError(lf)
 
 
+def get_parsed_size(tp, con):
+    return len(tp.build(con))
+
+
 class DbiStream(Stream):
     _sHeader = Struct(
         "magic" / Const(b"\xFF\xFF\xFF\xFF", Bytes(4)),  # 0
@@ -442,6 +451,39 @@ class DbiStream(Stream):
         "resvd" / Int32ul,  # 60
     )
 
+    # struct MODI
+    _DbiExHeader = Struct(
+        "pmod" / Int32ul,  # currently open mod
+        "sc" / Struct(
+            "isect" / Int16sl,  # index of Section
+            Padding(2),
+            "off" / Int32sl,
+            "size" / Int32sl,
+            "dwCharacteristics" / Int32ul,
+            "imod" / Int16sl,  # index of module
+            Padding(2),
+            "dwDataCrc" / Int32ul,
+            "dwRelocCrc" / Int32ul,
+        ),
+        "f" / BitStruct(
+            "Written" / Flag,
+            "ECEnabled" / Flag,
+            Padding(6),
+        ),
+        "iTSM" / Int8ul,
+        "sn" / Int16sl,  # stream number
+        "symSize" / Int32ul,  # cbSyms
+        "oldLineSize" / Int32ul,  # cbLines
+        "lineSize" / Int32ul,  # cbC13Lines
+        "nSrcFiles" / Int16sl,  # ifileMac
+        Padding(2),
+        "mpifileichFile" / Int32ul,  # array [0..ifileMac) of offsets into dbi.bufFilenames
+        "niSrcFile" / Int32ul,  # name index for src file
+        "niPdbFile" / Int32ul,  # name index for compiler PDB
+        "modName" / CString(encoding = "utf8"),  # szModule
+        "objName" / CString(encoding = "utf8"),  # szObjFile
+    )
+
     _DbiDbgHeader = Struct(
         "snFPO" / Int16sl,
         "snException" / Int16sl,
@@ -458,6 +500,23 @@ class DbiStream(Stream):
 
     def load_header(self, fp):
         super().load_header(fp)
+
+        data = self.getbodydata(fp)
+
+        dbiexhdrs = []
+        dbiexhdr_data = data[:self.header.module_size]
+        _ALIGN = 4
+        while dbiexhdr_data:
+            h = self._DbiExHeader.parse(dbiexhdr_data)
+            dbiexhdrs.append(h)
+            # sizeof() is broken on CStrings for construct, so
+            # this ugly ugly hack is necessary
+            sz = get_parsed_size(self._DbiExHeader, h)
+            if sz % _ALIGN != 0:
+                sz = sz + (_ALIGN - (sz % _ALIGN))
+            dbiexhdr_data = dbiexhdr_data[sz:]
+        self.exheaders = dbiexhdrs
+
         pos = (
             + self.header.module_size
             + self.header.secconSize
@@ -466,8 +525,19 @@ class DbiStream(Stream):
             + self.header.tsmapSize
             + self.header.ecinfoSize
         )
-        data = self.getbodydata(fp)
         self.dbgheader = self._DbiDbgHeader.parse(data[pos:])
+
+
+class DbiModule(Stream):
+    _sHeader = Struct(
+        "unknown" / Int32ul,  # 4
+    )
+
+    def load_body(self, fp):
+        data = self.getbodydata(fp)
+        arr = GreedyRange(dbi.sSymType)
+        types = arr.parse(data)
+        self.types = [dbi.flatten_leaf_data(t) for t in types]
 
 
 class GlobalSymbolStream(Stream):
@@ -603,6 +673,8 @@ class PDB7:
             _streams.append(s)
 
             if id == 3:
+                for mod in s.exheaders:
+                    STREAM_CLASSES[mod.sn] = DbiModule
                 # dbistream contains supported info for other debug streams
                 if s.header.symrecStream != -1:
                     STREAM_CLASSES[s.header.symrecStream] = GlobalSymbolStream
