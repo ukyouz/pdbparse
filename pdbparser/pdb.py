@@ -29,13 +29,13 @@ from construct import Struct
 from . import tpi
 from . import dbi
 
-_strarray = "names" / GreedyRange(CString(encoding = "utf8"))
+_strarray = "names" / GreedyRange(CString(encoding="utf8"))
 
 
 # ref: https://llvm.org/docs/PDB/MsfFile.html#file-layout
 # ref: https://auscitte.github.io/posts/Func-Prototypes-With-Pdbparse
 
-_PDB7_SIGNATURE = b"Microsoft C/C++ MSF 7.00\r\n\x1ADS\0\0\0"
+_PDB7_SIGNATURE = b"Microsoft C/C++ MSF 7.00\r\n\x1aDS\0\0\0"
 
 StructPdbHeader = Struct(
     "signature" / Bytes(len(_PDB7_SIGNATURE)),
@@ -47,6 +47,7 @@ StructPdbHeader = Struct(
     # pointer array to each Stream Directory
     "BlockMapAddr" / Int32ul,
 )
+
 
 @dataclass
 class Stream:
@@ -73,11 +74,10 @@ class Stream:
         self.header = hdr_cls.parse(data)
 
     def load_body(self, fp):
-        """ heavy loading operations goes here """
+        """heavy loading operations goes here"""
 
 
-class OldDirectory(Stream):
-    ...
+class OldDirectory(Stream): ...
 
 
 class PdbStream(Stream):
@@ -135,30 +135,27 @@ class TpiStream(Stream):
         "typeIndexBegin" / Int32ul,
         "typeIndexEnd" / Int32ul,
         "typeRecordBytes" / Int32ul,
-
         "sn" / Int16ul,
         Padding(2),
         "hashKey" / Int32ul,
         "numHashBuckets" / Int32ul,
-
         "hashValueBufferOffset" / Int32ul,
         "hashValueBufferLength" / Int32ul,
-
         "indexOffsetBufferOffset" / Int32ul,
         "indexOffsetBufferLength" / Int32ul,
-
         "hashAdjBufferOffset" / Int32ul,
         "hashAdjBufferLength" / Int32ul,
     )
 
     @cached_property
     def structs(self) -> dict[str, StructRecord]:
-        """ return dict of {structname: idx} """
+        """return dict of {structname: idx}"""
         types = getattr(self, "_types", {})
         return {
             t.name: t
             for t in types.values()
-            if t.leafKind in {
+            if t.leafKind
+            in {
                 tpi.eLeafKind.LF_CLASS,
                 tpi.eLeafKind.LF_STRUCTURE,
                 tpi.eLeafKind.LF_STRUCTURE_ST,
@@ -207,10 +204,7 @@ class TpiStream(Stream):
 
     def load_body(self, fp):
         data = self.getbodydata(fp)
-        arr = Array(
-            self.header.typeIndexEnd - self.header.typeIndexBegin,
-            tpi.sTypType
-        )
+        arr = Array(self.header.typeIndexEnd - self.header.typeIndexBegin, tpi.sTypType)
         types = arr.parse(data)
         type_dict = {}
         for idx, t in zip(
@@ -243,7 +237,10 @@ class TpiStream(Stream):
         fwdrefs_map = {
             fwdrefs[t.name]: idx
             for idx, t in type_dict.items()
-            if hasattr(t, "name") and hasattr(t, "property") and not t.property.fwdref and t.name in fwdrefs
+            if hasattr(t, "name")
+            and hasattr(t, "property")
+            and not t.property.fwdref
+            and t.name in fwdrefs
         }
         # resolve fields
         for t in type_dict.values():
@@ -427,8 +424,8 @@ class TpiStream(Stream):
                 levelname=lf.name,
                 type=self.get_lf_tpname(lf),
                 address=addr,
-                size=self.get_lf_size(lf), #?
-                fields=[], #?
+                size=self.get_lf_size(lf),  # ?
+                fields=[],  # ?
                 lf=lf,
             )
 
@@ -461,7 +458,7 @@ def get_parsed_size(tp, con):
 
 class DbiStream(Stream):
     _sHeader = Struct(
-        "magic" / Const(b"\xFF\xFF\xFF\xFF", Bytes(4)),  # 0
+        "magic" / Const(b"\xff\xff\xff\xff", Bytes(4)),  # 0
         "version" / Int32ul,  # 4
         "age" / Int32ul,  # 8
         "gssymStream" / Int16sl,  # 12
@@ -479,38 +476,39 @@ class DbiStream(Stream):
         "dbghdrSize" / Int32ul,  # 48
         "ecinfoSize" / Int32ul,  # 52
         "flags" / Int16ul,  # 56
-        "Machine" / Enum(
+        "Machine"
+        / Enum(
             Int16ul,  # 58
-            IMAGE_FILE_MACHINE_UNKNOWN = 0x0000,
-            IMAGE_FILE_MACHINE_I386 = 0x014c,
-            IMAGE_FILE_MACHINE_R3000 = 0x0162,
-            IMAGE_FILE_MACHINE_R4000 = 0x0166,
-            IMAGE_FILE_MACHINE_R10000 = 0x0168,
-            IMAGE_FILE_MACHINE_WCEMIPSV2 = 0x0169,
-            IMAGE_FILE_MACHINE_ALPHA = 0x0184,
-            IMAGE_FILE_MACHINE_SH3 = 0x01a2,
-            IMAGE_FILE_MACHINE_SH3DSP = 0x01a3,
-            IMAGE_FILE_MACHINE_SH3E = 0x01a4,
-            IMAGE_FILE_MACHINE_SH4 = 0x01a6,
-            IMAGE_FILE_MACHINE_SH5 = 0x01a8,
-            IMAGE_FILE_MACHINE_ARM = 0x01c0,
-            IMAGE_FILE_MACHINE_THUMB = 0x01c2,
-            IMAGE_FILE_MACHINE_ARMNT = 0x01c4,
-            IMAGE_FILE_MACHINE_AM33 = 0x01d3,
-            IMAGE_FILE_MACHINE_POWERPC = 0x01f0,
-            IMAGE_FILE_MACHINE_POWERPCFP = 0x01f1,
-            IMAGE_FILE_MACHINE_IA64 = 0x0200,
-            IMAGE_FILE_MACHINE_MIPS16 = 0x0266,
-            IMAGE_FILE_MACHINE_ALPHA64 = 0x0284,
-            IMAGE_FILE_MACHINE_AXP64 = 0x0284,
-            IMAGE_FILE_MACHINE_MIPSFPU = 0x0366,
-            IMAGE_FILE_MACHINE_MIPSFPU16 = 0x0466,
-            IMAGE_FILE_MACHINE_TRICORE = 0x0520,
-            IMAGE_FILE_MACHINE_CEF = 0x0cef,
-            IMAGE_FILE_MACHINE_EBC = 0x0ebc,
-            IMAGE_FILE_MACHINE_AMD64 = 0x8664,
-            IMAGE_FILE_MACHINE_M32R = 0x9041,
-            IMAGE_FILE_MACHINE_CEE = 0xc0ee,
+            IMAGE_FILE_MACHINE_UNKNOWN=0x0000,
+            IMAGE_FILE_MACHINE_I386=0x014C,
+            IMAGE_FILE_MACHINE_R3000=0x0162,
+            IMAGE_FILE_MACHINE_R4000=0x0166,
+            IMAGE_FILE_MACHINE_R10000=0x0168,
+            IMAGE_FILE_MACHINE_WCEMIPSV2=0x0169,
+            IMAGE_FILE_MACHINE_ALPHA=0x0184,
+            IMAGE_FILE_MACHINE_SH3=0x01A2,
+            IMAGE_FILE_MACHINE_SH3DSP=0x01A3,
+            IMAGE_FILE_MACHINE_SH3E=0x01A4,
+            IMAGE_FILE_MACHINE_SH4=0x01A6,
+            IMAGE_FILE_MACHINE_SH5=0x01A8,
+            IMAGE_FILE_MACHINE_ARM=0x01C0,
+            IMAGE_FILE_MACHINE_THUMB=0x01C2,
+            IMAGE_FILE_MACHINE_ARMNT=0x01C4,
+            IMAGE_FILE_MACHINE_AM33=0x01D3,
+            IMAGE_FILE_MACHINE_POWERPC=0x01F0,
+            IMAGE_FILE_MACHINE_POWERPCFP=0x01F1,
+            IMAGE_FILE_MACHINE_IA64=0x0200,
+            IMAGE_FILE_MACHINE_MIPS16=0x0266,
+            IMAGE_FILE_MACHINE_ALPHA64=0x0284,
+            IMAGE_FILE_MACHINE_AXP64=0x0284,
+            IMAGE_FILE_MACHINE_MIPSFPU=0x0366,
+            IMAGE_FILE_MACHINE_MIPSFPU16=0x0466,
+            IMAGE_FILE_MACHINE_TRICORE=0x0520,
+            IMAGE_FILE_MACHINE_CEF=0x0CEF,
+            IMAGE_FILE_MACHINE_EBC=0x0EBC,
+            IMAGE_FILE_MACHINE_AMD64=0x8664,
+            IMAGE_FILE_MACHINE_M32R=0x9041,
+            IMAGE_FILE_MACHINE_CEE=0xC0EE,
         ),
         "resvd" / Int32ul,  # 60
     )
@@ -518,7 +516,8 @@ class DbiStream(Stream):
     # struct MODI
     _DbiExHeader = Struct(
         "pmod" / Int32ul,  # currently open mod
-        "sc" / Struct(
+        "sc"
+        / Struct(
             "isect" / Int16sl,  # index of Section
             Padding(2),
             "off" / Int32sl,
@@ -529,7 +528,8 @@ class DbiStream(Stream):
             "dwDataCrc" / Int32ul,
             "dwRelocCrc" / Int32ul,
         ),
-        "f" / BitStruct(
+        "f"
+        / BitStruct(
             "Written" / Flag,
             "ECEnabled" / Flag,
             Padding(6),
@@ -541,11 +541,12 @@ class DbiStream(Stream):
         "lineSize" / Int32ul,  # cbC13Lines
         "nSrcFiles" / Int16sl,  # ifileMac
         Padding(2),
-        "mpifileichFile" / Int32ul,  # array [0..ifileMac) of offsets into dbi.bufFilenames
+        # array [0..ifileMac) of offsets into dbi.bufFilenames
+        "mpifileichFile" / Int32ul,
         "niSrcFile" / Int32ul,  # name index for src file
         "niPdbFile" / Int32ul,  # name index for compiler PDB
-        "modName" / CString(encoding = "utf8"),  # szModule
-        "objName" / CString(encoding = "utf8"),  # szObjFile
+        "modName" / CString(encoding="utf8"),  # szModule
+        "objName" / CString(encoding="utf8"),  # szObjFile
     )
 
     _DbiDbgHeader = Struct(
@@ -568,7 +569,7 @@ class DbiStream(Stream):
         data = self.getbodydata(fp)
 
         dbiexhdrs = []
-        dbiexhdr_data = data[:self.header.module_size]
+        dbiexhdr_data = data[: self.header.module_size]
         _ALIGN = 4
         while dbiexhdr_data:
             h = self._DbiExHeader.parse(dbiexhdr_data)
@@ -582,7 +583,7 @@ class DbiStream(Stream):
         self.exheaders = dbiexhdrs
 
         pos = (
-            + self.header.module_size
+            self.header.module_size
             + self.header.secconSize
             + self.header.secmapSize
             + self.header.filinfSize
@@ -681,13 +682,14 @@ class SectionStream(Stream):
     def load_body(self, fp):
         data = self.getbodydata(fp)
         from . import pe
+
         self.sections = pe.Sections.parse(data)
 
 
 class OmapStream(Stream):
-
     def load(self):
         from . import omap
+
         self.omap_data = omap.Omap(self.data)
 
     def remap(self, addr):
@@ -704,6 +706,7 @@ STREAM_CLASSES = {
 }
 
 U32_SZ = 4
+
 
 def div_ceil(x, y):
     return (x + y - 1) // y
@@ -733,8 +736,7 @@ class PDB7:
         stream_dirs_pg_cnt = div_ceil(pdb_hdr.numDirectoryBytes, pdb_hdr.blockSize)
         fp.seek(pdb_hdr.BlockMapAddr * pdb_hdr.blockSize)
         root_dir_indice = struct.unpack(
-            "<" + ("%dI" % stream_dirs_pg_cnt),
-            fp.read(stream_dirs_pg_cnt * U32_SZ)
+            "<" + ("%dI" % stream_dirs_pg_cnt), fp.read(stream_dirs_pg_cnt * U32_SZ)
         )
 
         root_pages_data = io.BytesIO()
@@ -743,25 +745,24 @@ class PDB7:
             root_pages_data.write(fp.read(pdb_hdr.blockSize))
         root_pages_data.seek(0)
 
-        """"""""""""""""""
+        """""" """""" """"""
 
-        num_streams, = struct.unpack("<I", root_pages_data.read(U32_SZ))
+        (num_streams,) = struct.unpack("<I", root_pages_data.read(U32_SZ))
         streamSizes = struct.unpack(
-            "<" + ("%sI" % num_streams),
-            root_pages_data.read(num_streams * U32_SZ)
+            "<" + ("%sI" % num_streams), root_pages_data.read(num_streams * U32_SZ)
         )
 
         _streams = []
         for id, stream_sz in enumerate(streamSizes):
             stream_pg_cnt = div_ceil(stream_sz, pdb_hdr.blockSize)
-            stream_pages = list(struct.unpack(
-                "<" + ("%sI" % stream_pg_cnt),
-                root_pages_data.read(stream_pg_cnt * U32_SZ)
-            ))
+            stream_pages = list(
+                struct.unpack(
+                    "<" + ("%sI" % stream_pg_cnt),
+                    root_pages_data.read(stream_pg_cnt * U32_SZ),
+                )
+            )
             s = STREAM_CLASSES.get(id, Stream)(
-                byte_sz=stream_sz,
-                page_sz=pdb_hdr.blockSize,
-                pages=stream_pages
+                byte_sz=stream_sz, page_sz=pdb_hdr.blockSize, pages=stream_pages
             )
             s.load_header(fp)
             _streams.append(s)
@@ -881,7 +882,7 @@ class PDB7:
 
 def parse(filename) -> PDB7:
     "Open a PDB file and autodetect its version"
-    with open(filename, 'rb') as f:
+    with open(filename, "rb") as f:
         sig = f.read(len(_PDB7_SIGNATURE))
         f.seek(0)
         if sig == _PDB7_SIGNATURE:
@@ -889,4 +890,4 @@ def parse(filename) -> PDB7:
             pdb.name = filename
             return pdb
         else:
-           raise NotImplementedError(sig)
+            raise NotImplementedError(sig)
