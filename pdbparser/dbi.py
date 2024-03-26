@@ -329,17 +329,13 @@ lfProc32 = Struct(
     "name" / CString(encoding="utf8"),
 )
 
-lfBPref32 = Struct(
-
-)
-
 sSymType = Struct(
     "length" / Int16ul,
-    "symKind" / eSymKind,
+    "leafKind" / eSymKind,
     "data" / RestreamData(
         Bytes(lambda this: this.length - 2),
         Switch(
-            lambda this: this.symKind,
+            lambda this: this.leafKind,
             {
                 "S_OBJNAME": lfObjName,
                 "S_GPROC32": lfProc32,
@@ -349,12 +345,3 @@ sSymType = Struct(
         ),
     ),
 )
-
-
-def flatten_leaf_data(lf):
-    """ insert symKind to data attribute, and return attribute as a new leaf """
-    if lf.data is None:
-        lf.data = Container()
-    lf.data.symKind = lf.symKind
-    return lf.data
-

@@ -1,3 +1,4 @@
+from . import gdata
 import io
 import struct
 from contextlib import suppress
@@ -166,39 +167,23 @@ class TpiStream(Stream):
             }
         }
 
-    def get_type_lf_from_id(self, ref: int):
+    def get_lf_from_tid(self, ref: int):
         if ref < self.header.typeIndexBegin:
             try:
                 return tpi.eBaseTypes[ref]
             except KeyError:
                 print("Unknown Base Type %s" % hex(ref))
-                raise KeyError
+                raise KeyError(ref)
         elif ref >= self.header.typeIndexBegin:
             return self._types[ref]
 
-    def get_type_lf_from_name(self, ref: str):
+    def get_lf_from_name(self, ref: str):
         for lf in tpi.eBaseTypes.values():
             if lf.name == ref:
                 return lf
         return self.structs[ref]
 
-    def _resolve_refs(self, lf, inside_fields: bool=False):
-        ref_fields = tpi.FieldsRefAttrs if inside_fields else tpi.TypRefAttrs
-
-        for attr in ref_fields.get(lf.leafKind, []):
-            ref = lf[attr]
-            if isinstance(ref, int):
-                with suppress(KeyError):
-                    setattr(lf, attr + "Ref", self.get_type_lf_from_id(ref))
-            elif isinstance(ref, list):
-                for i, x in enumerate(ref):
-                    if isinstance(x, int):
-                        with suppress(KeyError):
-                            ref[i] = self.get_type_lf_from_id(x)
-                    else:
-                        raise NotImplementedError(ref)
-
-    def _foward_refs(self, lf, fwdref_map, inside_fields: bool=False):
+    def _foward_refs(self, lf, fwdref_map, inside_fields: bool = False):
         ref_fields = tpi.FieldsRefAttrs if inside_fields else tpi.TypRefAttrs
 
         def get_ref(ref: int):
@@ -271,19 +256,86 @@ class TpiStream(Stream):
         for k in fwdrefs_map.keys():
             del type_dict[k]
 
-        # resolve fields
-        for t in type_dict.values():
-            if t.leafKind is tpi.eLeafKind.LF_FIELDLIST:
-                for f in t.fields:
-                    self._resolve_refs(f, inside_fields=True)
+    ARCH_PTR_SIZE = 4
+
+    def get_lf_size(self, lf):
+        if isinstance(lf, tpi.BasicType):
+            return lf.size
+        elif lf.leafKind in {
+            tpi.eLeafKind.LF_CLASS,
+            tpi.eLeafKind.LF_STRUCTURE,
+            tpi.eLeafKind.LF_STRUCTURE_ST,
+            tpi.eLeafKind.LF_UNION,
+            tpi.eLeafKind.LF_UNION_ST,
+            tpi.eLeafKind.LF_ARRAY,
+        }:
+            return lf.size
+        elif lf.leafKind == tpi.eLeafKind.LF_POINTER:
+            return self.ARCH_PTR_SIZE
+        elif lf.leafKind == tpi.eLeafKind.LF_ENUM:
+            return 4  # FIXME not sure ??
+        elif lf.leafKind == tpi.eLeafKind.LF_BITFIELD:
+            return self.get_lf_from_tid(lf.baseType).size
+        elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
+            return self.get_lf_size(lf.modifiedType)
+        else:
+            return -1
+
+    def get_lf_tpname(self, lf):
+        """return type string"""
+        if isinstance(lf, tpi.BasicType):
+            return str(lf)
+        elif lf.leafKind in {
+            tpi.eLeafKind.LF_CLASS,
+            tpi.eLeafKind.LF_STRUCTURE,
+            tpi.eLeafKind.LF_STRUCTURE_ST,
+            tpi.eLeafKind.LF_UNION,
+            tpi.eLeafKind.LF_UNION_ST,
+        }:
+            return lf.name
+        elif lf.leafKind == tpi.eLeafKind.LF_POINTER:
+            ref = self.get_lf_from_tid(lf.utype)
+            if ref.leafKind == tpi.eLeafKind.LF_PROCEDURE:
+                return self.get_lf_tpname(ref)
+            return "%s *" % self.get_lf_tpname(ref)
+        elif lf.leafKind == tpi.eLeafKind.LF_ENUM:
+            return str(lf.leafKind)
+        elif lf.leafKind == tpi.eLeafKind.LF_PROCEDURE:
+            rtntype = self.get_lf_tpname(self.get_lf_from_tid(lf.rvtype))
+            args = [
+                self.get_lf_tpname(self.get_lf_from_tid(x))
+                for x in self.get_lf_from_tid(lf.arglist).args
+            ]
+            return "%s (*)(%s)" % (rtntype, ", ".join(args))
+        elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
+            tpname = self.get_lf_tpname(self.get_lf_from_tid(lf.modifiedType))
+            modifiers = [
+                m for m in ["const", "unaligned", "volatile"] if lf.modifier[m]
+            ]
+            return "%s %s" % (" ".join(modifiers), tpname)
+        elif lf.leafKind == tpi.eLeafKind.LF_ARRAY:
+            dims = []
+            item_lf = lf
+            while getattr(item_lf, "leafKind", None) == tpi.eLeafKind.LF_ARRAY:
+                next_dim_lf = self.get_lf_from_tid(item_lf.elemType)
+                dims.append(self.get_lf_size(item_lf) // self.get_lf_size(next_dim_lf))
+                item_lf = next_dim_lf
+            structname = self.get_lf_tpname(item_lf)
+            if structname.endswith("*"):
+                return "(%s)%s" % (structname, "".join(["[%d]" % d for d in dims]))
             else:
-                self._resolve_refs(t, inside_fields=False)
+                return "%s%s" % (structname, "".join(["[%d]" % d for d in dims]))
+        elif lf.leafKind == tpi.eLeafKind.LF_BITFIELD:
+            return str(lf.leafKind)
+        else:
+            return str(lf.leafKind)
 
     def deref_pointer(self, lf, addr, recursive=True) -> StructRecord:
-        if not hasattr(lf, "utypeRef"):
+        if not hasattr(lf, "utype"):
             raise ValueError("Shall be a pointer type, got: %r" % lf.name)
-        struct = lf.utypeRef
-        if struct is None:
+        try:
+            struct = self.get_lf_from_tid(lf.utype)
+        except KeyError:
             raise ValueError("Shall be a pointer type, got: %r" % lf.name)
         return self.form_structs(struct, addr, recursive)
 
@@ -291,9 +343,9 @@ class TpiStream(Stream):
         if isinstance(lf, tpi.BasicType):
             return new_struct(
                 levelname=lf.name,
-                type = tpi.get_tpname(lf),
-                address = addr,
-                size = tpi.get_size(lf),
+                type=self.get_lf_tpname(lf),
+                address=addr,
+                size=self.get_lf_size(lf),
                 is_pointer=lf.is_ptr,
                 has_sign=lf.has_sign,
                 lf=lf,
@@ -307,42 +359,48 @@ class TpiStream(Stream):
         }:
             struct = new_struct(
                 levelname="",
-                type=tpi.get_tpname(lf),
-                address = addr,
-                size = tpi.get_size(lf),
+                type=self.get_lf_tpname(lf),
+                address=addr,
+                size=self.get_lf_size(lf),
                 fields={},
                 lf=lf,
             )
             if recursive or _depth == 0:
-                for member in lf.fieldsRef.fields:
-                    mem_struct = self.form_structs(member, addr, recursive, _depth+1)
+                for member_lf in self.get_lf_from_tid(lf.fields).fields:
+                    mem_struct = self.form_structs(
+                        member_lf, addr, recursive, _depth + 1
+                    )
                     if mem_struct is None:
                         continue
-                    mem_struct["levelname"] = member.name
-                    struct["fields"][member.name] = mem_struct
+                    mem_struct["levelname"] = member_lf.name
+                    struct["fields"][member_lf.name] = mem_struct
             return struct
 
         elif lf.leafKind == tpi.eLeafKind.LF_ARRAY:
-            count = tpi.get_size(lf) // tpi.get_size(lf.elemTypeRef)
+            elem_lf = self.get_lf_from_tid(lf.elemType)
+            count = self.get_lf_size(lf) // self.get_lf_size(elem_lf)
 
             struct = new_struct(
-                levelname = lf.name,
-                type = tpi.get_tpname(lf),
-                address = addr,
-                size = tpi.get_size(lf),
-                fields = [],
+                levelname=lf.name,
+                type=self.get_lf_tpname(lf),
+                address=addr,
+                size=self.get_lf_size(lf),
+                fields=[],
                 lf=lf,
             )
             if recursive or _depth == 0:
                 for i in range(count):
-                    off = i * tpi.get_size(lf.elemTypeRef)
-                    elem_s = self.form_structs(lf.elemTypeRef, addr + off, recursive, _depth+1)
+                    off = i * self.get_lf_size(elem_lf)
+                    elem_s = self.form_structs(
+                        elem_lf, addr + off, recursive, _depth + 1
+                    )
                     elem_s["levelname"] = "[%d]" % i
                     struct["fields"].append(elem_s)
             return struct
 
         elif lf.leafKind == tpi.eLeafKind.LF_MEMBER:
-            struct = self.form_structs(lf.typeRef, addr+lf.offset, recursive, _depth)
+            ref = self.get_lf_from_tid(lf.type)
+            struct = self.form_structs(ref, addr + lf.offset, recursive, _depth)
             struct["levelname"] = lf.name
             return struct
 
@@ -355,10 +413,10 @@ class TpiStream(Stream):
 
         elif lf.leafKind == tpi.eLeafKind.LF_BITFIELD:
             return new_struct(
-                levelname = "",
-                type = tpi.get_tpname(lf),
+                levelname="",
+                type=self.get_lf_tpname(lf),
                 address=addr,
-                size=tpi.get_size(lf),
+                size=self.get_lf_size(lf),
                 bitoff=lf.position,
                 bitsize=lf.length,
                 lf=lf,
@@ -366,27 +424,33 @@ class TpiStream(Stream):
 
         elif lf.leafKind == tpi.eLeafKind.LF_ENUM:
             return new_struct(
-                levelname = lf.name,
-                type = tpi.get_tpname(lf),
-                address = addr,
-                size = tpi.get_size(lf), #?
-                fields = [], #?
+                levelname=lf.name,
+                type=self.get_lf_tpname(lf),
+                address=addr,
+                size=self.get_lf_size(lf), #?
+                fields=[], #?
                 lf=lf,
             )
 
         elif lf.leafKind == tpi.eLeafKind.LF_POINTER:
             return new_struct(
-                levelname = "",
-                type = tpi.get_tpname(lf),
-                address = addr,
-                size = tpi.get_size(lf),
-                fields = None,
-                is_pointer=lf.utypeRef.leafKind != tpi.eLeafKind.LF_PROCEDURE,
+                levelname="",
+                type=self.get_lf_tpname(lf),
+                address=addr,
+                size=self.get_lf_size(lf),
+                fields=None,
+                is_pointer=self.get_lf_from_tid(lf.utype).leafKind
+                != tpi.eLeafKind.LF_PROCEDURE,
                 lf=lf,
             )
 
         elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
-            return self.form_structs(lf.modifiedTypeRef)
+            return self.form_structs(self.get_lf_from_tid(lf.modifiedType))
+        elif lf.leafKind == dbi.eSymKind.S_LPROC32:
+            return new_struct(
+                levelname=lf.name,
+                type=self.get_lf_tpname(lf.typind),
+            )
         else:
             raise NotImplementedError(lf)
 
@@ -537,13 +601,12 @@ class DbiModule(Stream):
         data = self.getbodydata(fp)
         arr = GreedyRange(dbi.sSymType)
         types = arr.parse(data)
-        self.types = [dbi.flatten_leaf_data(t) for t in types]
+        self.symbols = [tpi.flatten_leaf_data(t) for t in types]
 
 
 class GlobalSymbolStream(Stream):
     def load_body(self, fp):
         data = self.getbodydata(fp)
-        from . import gdata
         globalsymbols = gdata.parse(data)
         for g in globalsymbols:
             if isinstance(g.leafKind, int):
@@ -551,32 +614,63 @@ class GlobalSymbolStream(Stream):
                 try:
                     d = getattr(self, kind)
                 except AttributeError:
-                    setattr(self, kind, [])
-                    d = getattr(self, kind)
+                    d = []
+                    setattr(self, kind, d)
                 d.append(g)
             else:
                 kind = str(g.leafKind)
                 try:
                     d = getattr(self, kind.lower())
                 except AttributeError:
-                    setattr(self, kind.lower(), {})
-                    d = getattr(self, kind.lower())
+                    d = []
+                    setattr(self, kind.lower(), d)
                 try:
-                    d[g.name] = g
+                    d.append(g)
                 except AttributeError:
                     breakpoint()
 
+    @cached_property
+    def symbols(self) -> dict[gdata.DATASYM32]:
+        syms = {}
+        for attr in ("s_gdata32", "s_ldata32"):
+            for v in getattr(self, attr, []):
+                # there will be multiple Leaf
+                # with same v.name buf different v.offset
+                # I don't know what they stand for, though.
+                # Using the last one seems just work for mapping address usage
+                # so here I simply override the old one temporarily.
+                syms[v.name] = v
+        return syms
+
+    @cached_property
+    def refsymbols(self) -> dict[gdata.REFSYM2]:
+        syms = {}
+        for attr in ("s_procref", "s_lprocref"):
+            for v in getattr(self, attr, []):
+                # there will be multiple Leaf
+                # with same v.name buf different v.ibSym (kind of offset)
+                # I don't know what they stand for, though.
+                # Using the last one seems just work for imod mapping
+                # so here I simply override the old one temporarily.
+                syms[v.name] = v
+        return syms
+
+    @cached_property
+    def user_defines(self) -> dict[gdata.UDT]:
+        syms = {}
+        for v in getattr(self, "s_udt", []):
+            syms[v.name] = v
+        return syms
+
     def get_gvar_info(self, ref: str) -> Struct | None:
-        glb_info = None
-        with suppress(AttributeError, KeyError):
-            glb_info = self.s_gdata32[ref]
-        with suppress(AttributeError,KeyError):
-            glb_info = self.s_ldata32[ref]
-        return glb_info
+        return self.symbols.get(ref, None)
+
+    def get_proc_info(self, ref: str) -> Struct | None:
+        return self.refsymbols.get(ref, None)
 
     def get_user_define_typeid(self, ref: str) -> int | None:
         try:
-            return self.s_udt[ref].typind
+            return self.user_defines[ref].typind
         except AttributeError:
             return None
         except KeyError:
@@ -701,7 +795,7 @@ class PDB7:
         dbi = self.streams[3]
         return self.streams[dbi.header.symrecStream]
 
-    def remap_global_address(self, section: int, offset: int) -> int:
+    def _secoff_to_glb_addr(self, section: int, offset: int) -> int:
         dbi = self.streams[3]
         # remap global address
         try:
@@ -713,20 +807,76 @@ class PDB7:
         section_offset = sects[section - 1].VirtualAddress
         return omap.remap(offset + section_offset)
 
-    def get_type_lf_from_name(self, structname: str) -> tuple:
-        glb_info = self.glb_stream.get_gvar_info(structname)
-        udt_id = self.glb_stream.get_user_define_typeid(structname)
-        var_offset = 0
-        lf = None
-        if glb_info:
-            var_offset += self.remap_global_address(glb_info.section, glb_info.offset)
-            lf = self.tpi_stream.get_type_lf_from_id(glb_info.typind)
-        elif udt_id:
-            lf = self.tpi_stream.get_type_lf_from_id(udt_id)
-        else:
-            with suppress(KeyError):
-                lf = self.tpi_stream.get_type_lf_from_name(structname)
+    def _ximod_to_imod(self, ximod: int) -> DbiModule:
+        dbi = self.streams[3]
+        return self.streams[dbi.exheaders[ximod - 1].sn]
+
+    def get_lf_from_addr(self, addr: int) -> Struct | None:
+        for glb_info in self.glb_stream.symbols.values():
+            var_offset = self._secoff_to_glb_addr(glb_info.section, glb_info.offset)
+            if var_offset == addr:
+                return glb_info
+        for proc_info in self.glb_stream.refsymbols.values():
+            module = self._ximod_to_imod(proc_info.ximod)
+            for sym in module.symbols:
+                name = getattr(sym, "name", "")
+                if not name:
+                    continue
+                var_offset = self._secoff_to_glb_addr(sym.seg, sym.off)
+                if var_offset == addr:
+                    return sym
+
+    def _get_glb(self, ref: str):
+        glb_info = self.glb_stream.get_gvar_info(ref)
+        if glb_info is None:
+            return None, 0
+        var_offset = self._secoff_to_glb_addr(glb_info.section, glb_info.offset)
+        lf = self.tpi_stream.get_lf_from_tid(glb_info.typind)
         return lf, var_offset
+
+    def _get_proc(self, ref: str):
+        proc_info = self.glb_stream.get_proc_info(ref)
+        if proc_info is None:
+            return None, 0
+        lf = None
+        module = self._ximod_to_imod(proc_info.ximod)
+        for sym in module.symbols:
+            name = getattr(sym, "name", "")
+            if name == ref:
+                lf = sym
+                break
+        if lf:
+            var_offset = self._secoff_to_glb_addr(lf.seg, lf.off)
+            return lf, var_offset
+        else:
+            return None, 0
+
+    def _get_udt(self, ref: str):
+        udt_id = self.glb_stream.get_user_define_typeid(ref)
+        if udt_id is None:
+            return None, 0
+        lf = self.tpi_stream.get_lf_from_tid(udt_id)
+        return lf, 0
+
+    def _get_struct(self, ref: str):
+        try:
+            lf = self.tpi_stream.get_lf_from_name(ref)
+            return lf, 0
+        except KeyError:
+            return None, 0
+
+    def get_lf_from_name(self, structname: str) -> tuple:
+        for test_func in (
+            self._get_glb,
+            self._get_proc,
+            self._get_udt,
+            self._get_struct,
+        ):
+            lf, var_offs = test_func(structname)
+            if lf is not None and var_offs is not None:
+                return lf, var_offs
+
+        return None, 0
 
 
 def parse(filename) -> PDB7:

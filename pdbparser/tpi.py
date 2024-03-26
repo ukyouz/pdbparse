@@ -80,7 +80,7 @@ class BasicType(NamedTuple):
     size: int = 0
     has_sign: bool = False
     is_ptr: bool = False
-    utypeRef: Self | None = None
+    utype: int = -1
     # fields: list = []
 
     def __str__(self) -> str:
@@ -140,14 +140,14 @@ eBaseTypes = {
     0x007B: BasicType("T_CHAR32", 4),
 }
 eBaseTypes.update({
-    0x0103: BasicType("T_PVOID", 4, is_ptr=True, utypeRef=eBaseTypes[0x03]),
+    0x0103: BasicType("T_PVOID", 4, is_ptr=True, utype=0x03),
     # T_PFVOID        = 0x0203,   // far pointer to void
     # T_PHVOID        = 0x0303,   // huge pointer to void
-    0x0403: BasicType("T_32PVOID", 4, is_ptr=True, utypeRef=eBaseTypes[0x03]),
+    0x0403: BasicType("T_32PVOID", 4, is_ptr=True, utype=0x03),
     # T_32PFVOID      = 0x0503,   // 16:32 pointer to void
-    0x0603: BasicType("T_64PVOID", 8, is_ptr=True, utypeRef=eBaseTypes[0x03]),
+    0x0603: BasicType("T_64PVOID", 8, is_ptr=True, utype=0x03),
 
-    0x0408: BasicType("LF_METHOD_16t", 4, is_ptr=True, utypeRef=eBaseTypes[0x08]),
+    0x0408: BasicType("LF_METHOD_16t", 4, is_ptr=True, utype=0x08),
 
     # T_PCHAR         = 0x0110,   // 16 bit pointer to 8 bit signed
     # T_PFCHAR        = 0x0210,   // 16:16 far pointer to 8 bit signed
@@ -159,35 +159,35 @@ eBaseTypes.update({
     # T_PUCHAR        = 0x0120,   // 16 bit pointer to 8 bit unsigned
     # T_PFUCHAR       = 0x0220,   // 16:16 far pointer to 8 bit unsigned
     # T_PHUCHAR       = 0x0320,   // 16:16 huge pointer to 8 bit unsigned
-    0x0420: BasicType("T_32PUCHAR", 4, is_ptr=True, utypeRef=eBaseTypes[0x20]),
+    0x0420: BasicType("T_32PUCHAR", 4, is_ptr=True, utype=0x20),
     # T_32PFUCHAR     = 0x0520,   // 16:32 pointer to 8 bit unsigned
     # T_64PUCHAR      = 0x0620,   // 64 bit pointer to 8 bit unsigned
 
     # T_PRCHAR        = 0x0170,   // 16 bit pointer to a real char
     # T_PFRCHAR       = 0x0270,   // 16:16 far pointer to a real char
     # T_PHRCHAR       = 0x0370,   // 16:16 huge pointer to a real char
-    0x0470: BasicType("T_32PRCHAR", 4, is_ptr=True, utypeRef=eBaseTypes[0x70]),
+    0x0470: BasicType("T_32PRCHAR", 4, is_ptr=True, utype=0x70),
     # T_32PFRCHAR     = 0x0570,   // 16:32 pointer to a real char
     # T_64PRCHAR      = 0x0670,   // 64 bit pointer to a real char
 
     # T_PWCHAR        = 0x0171,   // 16 bit pointer to a wide char
     # T_PFWCHAR       = 0x0271,   // 16:16 far pointer to a wide char
     # T_PHWCHAR       = 0x0371,   // 16:16 huge pointer to a wide char
-    0x0471: BasicType("T_32PWCHAR", 4, is_ptr=True, utypeRef=eBaseTypes[0x71]),
+    0x0471: BasicType("T_32PWCHAR", 4, is_ptr=True, utype=0x71),
     # T_32PFWCHAR     = 0x0571,   // 16:32 pointer to a wide char
     # T_64PWCHAR      = 0x0671,   // 64 bit pointer to a wide char
 
     # T_PCHAR16        = 0x017a,   // 16 bit pointer to a 16-bit unicode char
     # T_PFCHAR16       = 0x027a,   // 16:16 far pointer to a 16-bit unicode char
     # T_PHCHAR16       = 0x037a,   // 16:16 huge pointer to a 16-bit unicode char
-    0x047A: BasicType("T_32PCHAR16", 4, is_ptr=True, utypeRef=eBaseTypes[0x7A]),
+    0x047A: BasicType("T_32PCHAR16", 4, is_ptr=True, utype=0x7A),
     # T_32PFCHAR16     = 0x057a,   // 16:32 pointer to a 16-bit unicode char
     # T_64PCHAR16      = 0x067a,   // 64 bit pointer to a 16-bit unicode char
 
     # T_PCHAR32        = 0x017b,   // 16 bit pointer to a 32-bit unicode char
     # T_PFCHAR32       = 0x027b,   // 16:16 far pointer to a 32-bit unicode char
     # T_PHCHAR32       = 0x037b,   // 16:16 huge pointer to a 32-bit unicode char
-    0x047B: BasicType("T_32PCHAR32", 4, is_ptr=True, utypeRef=eBaseTypes[0x7B]),
+    0x047B: BasicType("T_32PCHAR32", 4, is_ptr=True, utype=0x7B),
     # T_32PFCHAR32     = 0x057b,   // 16:32 pointer to a 32-bit unicode char
     # T_64PCHAR32      = 0x067b,   // 64 bit pointer to a 32-bit unicode char
 
@@ -208,14 +208,14 @@ eBaseTypes.update({
     # T_PSHORT        = 0x0111,   // 16 bit pointer to 16 bit signed
     # T_PFSHORT       = 0x0211,   // 16:16 far pointer to 16 bit signed
     # T_PHSHORT       = 0x0311,   // 16:16 huge pointer to 16 bit signed
-    0x0411: BasicType("T_32PSHORT", 4, is_ptr=True, utypeRef=eBaseTypes[0x11]),
+    0x0411: BasicType("T_32PSHORT", 4, is_ptr=True, utype=0x11),
     # T_32PFSHORT     = 0x0511,   // 16:32 pointer to 16 bit signed
     # T_64PSHORT      = 0x0611,   // 64 bit pointer to 16 bit signed
 
     # T_PUSHORT       = 0x0121,   // 16 bit pointer to 16 bit unsigned
     # T_PFUSHORT      = 0x0221,   // 16:16 far pointer to 16 bit unsigned
     # T_PHUSHORT      = 0x0321,   // 16:16 huge pointer to 16 bit unsigned
-    0x0421: BasicType("T_32PUSHORT", 4, is_ptr=True, utypeRef=eBaseTypes[0x21]),
+    0x0421: BasicType("T_32PUSHORT", 4, is_ptr=True, utype=0x21),
     # T_32PFUSHORT    = 0x0521,   // 16:32 pointer to 16 bit unsigned
     # T_64PUSHORT     = 0x0621,   // 64 bit pointer to 16 bit unsigned
 
@@ -240,8 +240,8 @@ eBaseTypes.update({
     # T_PHLONG        = 0x0312,   // 16:16 huge pointer to 32 bit signed
     # T_PHULONG       = 0x0322,   // 16:16 huge pointer to 32 bit unsigned
 
-    0x0412: BasicType("T_32PLONG", 4, is_ptr=True, utypeRef=eBaseTypes[0x12]),
-    0x0422: BasicType("T_32PULONG", 4, is_ptr=True, utypeRef=eBaseTypes[0x22]),
+    0x0412: BasicType("T_32PLONG", 4, is_ptr=True, utype=0x12),
+    0x0422: BasicType("T_32PULONG", 4, is_ptr=True, utype=0x22),
     # T_32PFLONG      = 0x0512,   // 16:32 pointer to 32 bit signed
     # T_32PFULONG     = 0x0522,   // 16:32 pointer to 32 bit unsigned
     # T_64PLONG       = 0x0612,   // 64 bit pointer to 32 bit signed
@@ -250,28 +250,28 @@ eBaseTypes.update({
     # T_PINT4         = 0x0174,   // 16 bit pointer to 32 bit signed int
     # T_PFINT4        = 0x0274,   // 16:16 far pointer to 32 bit signed int
     # T_PHINT4        = 0x0374,   // 16:16 huge pointer to 32 bit signed int
-    0x0474: BasicType("T_32PINT4", 4, is_ptr=True, utypeRef=eBaseTypes[0x74]),
+    0x0474: BasicType("T_32PINT4", 4, is_ptr=True, utype=0x74),
     # T_32PFINT4      = 0x0574,   // 16:32 pointer to 32 bit signed int
     # T_64PINT4       = 0x0674,   // 64 bit pointer to 32 bit signed int
 
     # T_PUINT4        = 0x0175,   // 16 bit pointer to 32 bit unsigned int
     # T_PFUINT4       = 0x0275,   // 16:16 far pointer to 32 bit unsigned int
     # T_PHUINT4       = 0x0375,   // 16:16 huge pointer to 32 bit unsigned int
-    0x0475: BasicType("T_32PUINT4", 4, is_ptr=True, utypeRef=eBaseTypes[0x75]),
+    0x0475: BasicType("T_32PUINT4", 4, is_ptr=True, utype=0x75),
     # T_32PFUINT4     = 0x0575,   // 16:32 pointer to 32 bit unsigned int
     # T_64PUINT4      = 0x0675,   // 64 bit pointer to 32 bit unsigned int
 
     # T_PQUAD         = 0x0113,   // 16 bit pointer to 64 bit signed
     # T_PFQUAD        = 0x0213,   // 16:16 far pointer to 64 bit signed
     # T_PHQUAD        = 0x0313,   // 16:16 huge pointer to 64 bit signed
-    0x0413: BasicType("T_32PQUAD", 4, is_ptr=True, utypeRef=eBaseTypes[0x13]),
+    0x0413: BasicType("T_32PQUAD", 4, is_ptr=True, utype=0x13),
     # T_32PFQUAD      = 0x0513,   // 16:32 pointer to 64 bit signed
     # T_64PQUAD       = 0x0613,   // 64 bit pointer to 64 bit signed
 
     # T_PUQUAD        = 0x0123,   // 16 bit pointer to 64 bit unsigned
     # T_PFUQUAD       = 0x0223,   // 16:16 far pointer to 64 bit unsigned
     # T_PHUQUAD       = 0x0323,   // 16:16 huge pointer to 64 bit unsigned
-    0x0423: BasicType("T_32PUQUAD", 4, is_ptr=True, utypeRef=eBaseTypes[0x23]),
+    0x0423: BasicType("T_32PUQUAD", 4, is_ptr=True, utype=0x23),
     # T_32PFUQUAD     = 0x0523,   // 16:32 pointer to 64 bit unsigned
     # T_64PUQUAD      = 0x0623,   // 64 bit pointer to 64 bit unsigned
 
@@ -327,7 +327,7 @@ eBaseTypes.update({
     # T_PREAL32       = 0x0140,   // 16 bit pointer to 32 bit real
     # T_PFREAL32      = 0x0240,   // 16:16 far pointer to 32 bit real
     # T_PHREAL32      = 0x0340,   // 16:16 huge pointer to 32 bit real
-    0x0440: BasicType("T_32PREAL32", 4, is_ptr=True, utypeRef=eBaseTypes[0x40]),
+    0x0440: BasicType("T_32PREAL32", 4, is_ptr=True, utype=0x40),
     # T_32PFREAL32    = 0x0540,   // 16:32 pointer to 32 bit real
     # T_64PREAL32     = 0x0640,   // 64 bit pointer to 32 bit real
 
@@ -348,7 +348,7 @@ eBaseTypes.update({
     # T_PREAL64       = 0x0141,   // 16 bit pointer to 64 bit real
     # T_PFREAL64      = 0x0241,   // 16:16 far pointer to 64 bit real
     # T_PHREAL64      = 0x0341,   // 16:16 huge pointer to 64 bit real
-    0x0441: BasicType("T_32PREAL64", 4, is_ptr=True, utypeRef=eBaseTypes[0x41]),
+    0x0441: BasicType("T_32PREAL64", 4, is_ptr=True, utype=0x41),
     # T_32PFREAL64    = 0x0541,   // 16:32 pointer to 64 bit real
     # T_64PREAL64     = 0x0641,   // 64 bit pointer to 64 bit real
 
@@ -398,7 +398,7 @@ eBaseTypes.update({
     # T_PBOOL08       = 0x0130,   // 16 bit pointer to  8 bit boolean
     # T_PFBOOL08      = 0x0230,   // 16:16 far pointer to  8 bit boolean
     # T_PHBOOL08      = 0x0330,   // 16:16 huge pointer to  8 bit boolean
-    0x0430: BasicType("T_32PBOOL08", 4, is_ptr=True, utypeRef=eBaseTypes[0x30]),
+    0x0430: BasicType("T_32PBOOL08", 4, is_ptr=True, utype=0x30),
     # T_32PFBOOL08    = 0x0530,   // 16:32 pointer to 8 bit boolean
     # T_64PBOOL08     = 0x0630,   // 64 bit pointer to 8 bit boolean
 
@@ -975,78 +975,3 @@ def flatten_leaf_data(lf):
     lf.data.leafKind = lf.leafKind
     return lf.data
 
-
-"""
-helper functions
-"""
-ARCH_PTR_SIZE = 4
-
-def get_size(lf):
-    if isinstance(lf, BasicType):
-        return lf.size
-    elif lf.leafKind in {
-        eLeafKind.LF_CLASS,
-        eLeafKind.LF_STRUCTURE,
-        eLeafKind.LF_STRUCTURE_ST,
-        eLeafKind.LF_UNION,
-        eLeafKind.LF_UNION_ST,
-        eLeafKind.LF_ARRAY,
-    }:
-        return lf.size
-    elif lf.leafKind == eLeafKind.LF_POINTER:
-        return ARCH_PTR_SIZE
-    elif lf.leafKind == eLeafKind.LF_ENUM:
-        return 4  # FIXME not sure ??
-    elif lf.leafKind == eLeafKind.LF_BITFIELD:
-        return lf.baseTypeRef.size
-    elif lf.leafKind == eLeafKind.LF_MODIFIER:
-        return get_size(lf.modifiedType)
-    else:
-        return -1
-
-
-def arr_dims(lf):
-    assert lf.leafKind == eLeafKind.LF_ARRAY
-
-
-def get_tpname(lf):
-    """return type string"""
-    if isinstance(lf, BasicType):
-        return str(lf)
-    elif lf.leafKind in {
-        eLeafKind.LF_CLASS,
-        eLeafKind.LF_STRUCTURE,
-        eLeafKind.LF_STRUCTURE_ST,
-        eLeafKind.LF_UNION,
-        eLeafKind.LF_UNION_ST,
-    }:
-        return lf.name
-    elif lf.leafKind == eLeafKind.LF_POINTER:
-        if lf.utypeRef.leafKind == eLeafKind.LF_PROCEDURE:
-            return get_tpname(lf.utypeRef)
-        return "%s *" % get_tpname(lf.utypeRef)
-    elif lf.leafKind == eLeafKind.LF_ENUM:
-        return str(lf.leafKind)
-    elif lf.leafKind == eLeafKind.LF_PROCEDURE:
-        rtntype = get_tpname(lf.rvtypeRef)
-        args = [get_tpname(x) for x in lf.arglistRef.args]
-        return "%s (*)(%s)" % (rtntype, ", ".join(args))
-    elif lf.leafKind == eLeafKind.LF_MODIFIER:
-        tpname = get_tpname(lf.modifiedTypeRef)
-        modifiers = [m for m in ["const", "unaligned", "volatile"] if lf.modifier[m]]
-        return "%s %s" % (" ".join(modifiers), tpname)
-    elif lf.leafKind == eLeafKind.LF_ARRAY:
-        dims = []
-        item_lf = lf
-        while getattr(item_lf, "leafKind", None) == eLeafKind.LF_ARRAY:
-            dims.append(get_size(item_lf) // get_size(item_lf.elemTypeRef))
-            item_lf = item_lf.elemTypeRef
-        structname = get_tpname(item_lf)
-        if structname.endswith("*"):
-            return "(%s)%s" % (structname, "".join(["[%d]" % d for d in dims]))
-        else:
-            return "%s%s" % (structname, "".join(["[%d]" % d for d in dims]))
-    elif lf.leafKind == eLeafKind.LF_BITFIELD:
-        return str(lf.leafKind)
-    else:
-        return str(lf.leafKind)

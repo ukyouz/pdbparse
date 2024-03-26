@@ -66,8 +66,14 @@ DATASYM32 = Struct(
 
 REFSYM2 = Struct(
     "sumName" / Int32ul,
-    "ibSym" / Int32ul,
-    "imode" / Int16ul,
+    "ibSym" / Int32ul,  # offset of actual symbol in $$Symbols
+    "ximod" / Int16ul,  # module containing actual symbol, 1 based (check imodForXimod)
+    "name" / CString("utf8"),
+)
+
+
+UDT = Struct(
+    "typind" / Int32ul,
     "name" / CString("utf8"),
 )
 
@@ -82,10 +88,7 @@ GSYMBOL = Struct(
                 "typind" / Int32ul,
                 "_raw" / sRaw("value"),
             ),
-            "S_UDT": Struct(
-                "typind" / Int32ul,
-                "name" / CString("utf8"),
-            ),
+            "S_UDT": UDT,
             "S_PUB32_ST": PUBSYM32,
             "S_LDATA32": DATASYM32,
             "S_GDATA32": DATASYM32,
