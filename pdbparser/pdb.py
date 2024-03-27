@@ -8,7 +8,7 @@ from dataclasses import field
 from datetime import datetime
 from functools import cached_property
 from io import BytesIO
-from typing import Self, TypedDict
+from typing import Callable, Self, TypedDict
 
 from construct import Array
 from construct import Bytes
@@ -432,14 +432,11 @@ class TpiStream(Stream):
             ref = self.get_lf_from_tid(lf.utype)
             return new_struct(
                 levelname="",
-                type=self.get_lf_tpname(ref),
+                type=self.get_lf_tpname(lf),
                 address=addr,
                 size=self.get_lf_size(lf),
                 fields=None,
-                is_pointer=(
-                    self.get_lf_from_tid(lf.utype).leafKind
-                    != tpi.eLeafKind.LF_PROCEDURE
-                ),
+                is_pointer=True,
                 is_funcptr=ref.leafKind == tpi.eLeafKind.LF_PROCEDURE,
                 lf=lf,
             )
@@ -603,8 +600,8 @@ class DbiModule(Stream):
 
     def load_body(self, bdata):
         types = dbi.parse(bdata)
-        _syms = tpi.flatten_leaf_data(types)
-        _named_syms = [_syms for t in _syms if hasattr(t, "name")]
+        _flattern_types = [tpi.flatten_leaf_data(t) for t in types]
+        _named_syms = [t for t in _flattern_types if hasattr(t, "name")]
         self.symbols = [s for s in _named_syms if not s.name.startswith("std::")]
 
 
@@ -613,7 +610,7 @@ class GlobalSymbolStream(Stream):
         # data = self.getbodydata(fp)
         globalsymbols = gdata.parse(bdata)
         # skip standard lib, since there is usually no need to debug them
-        my_symbols = [s for s in globalsymbols if not s.name.startswith("std::")]
+        my_symbols = [s for s in globalsymbols if not getattr(s, "name", "").startswith("std::")]
         for g in my_symbols:
             if isinstance(g.leafKind, int):
                 kind = "s_unknown"
@@ -799,6 +796,7 @@ class PDB7:
             s.load_body(s.getbodydata(fp))
 
         self.streams = _streams
+        # self._addrmap_cache = {}
 
     @property
     def tpi_stream(self) -> TpiStream:
@@ -809,7 +807,33 @@ class PDB7:
         dbi = self.streams[3]
         return self.streams[dbi.header.symrecStream]
 
-    def _secoff_to_func(self) -> int:
+    @cached_property
+    def addrress_map(self) -> dict[int, str]:
+        """`offset` is without virtual base"""
+        map = {}
+
+        var_offset = -1
+        remap_fn = self._secoff_to_func()
+        for glb_info in self.glb_stream.symbols.values():
+            try:
+                var_offset = remap_fn(glb_info.section, glb_info.offset)
+            except IndexError:
+                continue
+            map[var_offset] = glb_info.name
+
+        for proc_info in self.glb_stream.refsymbols.values():
+            module = self._ximod_to_imod(proc_info.ximod)
+            for sym in module.symbols:
+                seg = getattr(sym, "seg", None)
+                off = getattr(sym, "off", None)
+                if seg is None or off is None:
+                    continue
+                var_offset = remap_fn(seg, off)
+                map[var_offset] = sym.name
+
+        return map
+
+    def _secoff_to_func(self) -> Callable[[ int, int ], int]:
         dbi = self.streams[3]
         # remap global address
         try:
@@ -828,32 +852,15 @@ class PDB7:
         dbi = self.streams[3]
         return self.streams[dbi.exheaders[ximod - 1].sn]
 
-    def get_lf_from_offset(self, offset: int) -> Struct | None:
+    def get_refname_from_offset(self, offset: int) -> str | None:
         """`offset` is without virtual base"""
-        var_offset = -1
-        remap_fn = self._secoff_to_func()
-        for glb_info in self.glb_stream.symbols.values():
-            with suppress(IndexError):
-                var_offset = remap_fn(glb_info.section, glb_info.offset)
-            if var_offset == offset:
-                return glb_info
-
-        for proc_info in self.glb_stream.refsymbols.values():
-            module = self._ximod_to_imod(proc_info.ximod)
-            for sym in module.symbols:
-                seg = getattr(sym, "seg", None)
-                off = getattr(sym, "off", None)
-                if seg is None or off is None:
-                    continue
-                var_offset = remap_fn(seg, off)
-                if var_offset == offset:
-                    return sym
+        return self.addrress_map.get(offset, None)
 
     def _get_glb(self, ref: str):
         glb_info = self.glb_stream.get_gvar_info(ref)
         if glb_info is None:
             return None, 0
-        var_offset = self.remap_fn()(glb_info.section, glb_info.offset)
+        var_offset = self._secoff_to_func()(glb_info.section, glb_info.offset)
         lf = self.tpi_stream.get_lf_from_tid(glb_info.typind)
         return lf, var_offset
 
@@ -869,7 +876,7 @@ class PDB7:
                 lf = sym
                 break
         if lf:
-            var_offset = self.remap_fn()(lf.seg, lf.off)
+            var_offset = self._secoff_to_func()(lf.seg, lf.off)
             return lf, var_offset
         else:
             return None, 0

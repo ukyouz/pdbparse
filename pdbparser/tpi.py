@@ -979,7 +979,7 @@ sTypType = Struct(
 )
 
 
-def parse(data, count):
+def parse(data: int, count: int) -> list[Struct]:
     arr = Array(count, sTypType)
     return arr.parse(data)
 
