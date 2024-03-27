@@ -340,8 +340,8 @@ sSymType = Struct(
             lambda this: this.leafKind,
             {
                 "S_OBJNAME": lfObjName,
-                "S_GPROC32": lfProc32,
                 "S_LPROC32": lfProc32,
+                "S_GPROC32": lfProc32,
             },
             default = Pass,
         ),

@@ -108,13 +108,15 @@ GSYMBOL = Struct(
         default = Struct(
             "raw" / GreedyBytes
         ),
-    ))
+    )
+)
 
 GlobalsData = GreedyRange(
     Struct(
         "length" / Int16ul,
         "symbol" / RestreamData(Bytes(lambda ctx: ctx.length), GSYMBOL),
-    ))
+    )
+)
 
 
 def parse(data):

@@ -1,6 +1,7 @@
 from . import gdata
 import io
 import struct
+from pathlib import Path
 from contextlib import suppress
 from dataclasses import dataclass
 from dataclasses import field
@@ -66,7 +67,7 @@ class Stream:
     def getbodydata(self, fp) -> bytes:
         hdr_cls = getattr(self.__class__, "_sHeader", self._sHeader)
         hdr_offset = hdr_cls.sizeof()
-        return self.getdata(fp)[hdr_offset:]
+        return bytes(self.getdata(fp)[hdr_offset:])
 
     def load_header(self, fp):
         data = self.getdata(fp)
@@ -578,6 +579,8 @@ class DbiStream(Stream):
                 sz = sz + (_ALIGN - (sz % _ALIGN))
             dbiexhdr_data = dbiexhdr_data[sz:]
         self.exheaders = dbiexhdrs
+        pdb_drive = Path(fp.name).anchor
+        self.mymod_indexes = [i for i, h in enumerate(dbiexhdrs) if Path(h.modName).anchor == pdb_drive]
 
         pos = (
             self.header.module_size
@@ -594,19 +597,24 @@ class DbiModule(Stream):
     _sHeader = Struct(
         "unknown" / Int32ul,  # 4
     )
+    def load_header(self, fp):
+        super().load_header(fp)
+        self.symbols = []
 
-    def load_body(self, fp):
-        data = self.getbodydata(fp)
-        arr = GreedyRange(dbi.sSymType)
-        types = arr.parse(data)
-        self.symbols = [tpi.flatten_leaf_data(t) for t in types]
+    def load_body(self, bdata):
+        types = dbi.parse(bdata)
+        _syms = tpi.flatten_leaf_data(types)
+        _named_syms = [_syms for t in _syms if hasattr(t, "name")]
+        self.symbols = [s for s in _named_syms if not s.name.startswith("std::")]
 
 
 class GlobalSymbolStream(Stream):
     def load_body(self, bdata):
         # data = self.getbodydata(fp)
         globalsymbols = gdata.parse(bdata)
-        for g in globalsymbols:
+        # skip standard lib, since there is usually no need to debug them
+        my_symbols = [s for s in globalsymbols if not s.name.startswith("std::")]
+        for g in my_symbols:
             if isinstance(g.leafKind, int):
                 kind = "s_unknown"
                 try:
@@ -783,6 +791,13 @@ class PDB7:
             if isinstance(s, DbiModule):
                 continue
             s.load_body(s.getbodydata(fp))
+
+        dbs = _streams[3]
+        for mod in dbs.mymod_indexes:
+            header = dbs.exheaders[mod]
+            s = _streams[header.sn]
+            s.load_body(s.getbodydata(fp))
+
         self.streams = _streams
 
     @property
@@ -794,7 +809,7 @@ class PDB7:
         dbi = self.streams[3]
         return self.streams[dbi.header.symrecStream]
 
-    def _secoff_to_glb_addr(self, section: int, offset: int) -> int:
+    def _secoff_to_func(self) -> int:
         dbi = self.streams[3]
         # remap global address
         try:
@@ -803,8 +818,11 @@ class PDB7:
         except AttributeError:
             sects = self.streams[dbi.dbgheader.snSectionHdr].sections
             omap = DummyOmap()
-        section_offset = sects[section - 1].VirtualAddress
-        return omap.remap(offset + section_offset)
+
+        def remap(section: int, offset: int):
+            section_offset = sects[section - 1].VirtualAddress
+            return omap.remap(section_offset + offset)
+        return remap
 
     def _ximod_to_imod(self, ximod: int) -> DbiModule:
         dbi = self.streams[3]
@@ -812,10 +830,14 @@ class PDB7:
 
     def get_lf_from_offset(self, offset: int) -> Struct | None:
         """`offset` is without virtual base"""
+        var_offset = -1
+        remap_fn = self._secoff_to_func()
         for glb_info in self.glb_stream.symbols.values():
-            var_offset = self._secoff_to_glb_addr(glb_info.section, glb_info.offset)
+            with suppress(IndexError):
+                var_offset = remap_fn(glb_info.section, glb_info.offset)
             if var_offset == offset:
                 return glb_info
+
         for proc_info in self.glb_stream.refsymbols.values():
             module = self._ximod_to_imod(proc_info.ximod)
             for sym in module.symbols:
@@ -823,7 +845,7 @@ class PDB7:
                 off = getattr(sym, "off", None)
                 if seg is None or off is None:
                     continue
-                var_offset = self._secoff_to_glb_addr(seg, off)
+                var_offset = remap_fn(seg, off)
                 if var_offset == offset:
                     return sym
 
@@ -831,7 +853,7 @@ class PDB7:
         glb_info = self.glb_stream.get_gvar_info(ref)
         if glb_info is None:
             return None, 0
-        var_offset = self._secoff_to_glb_addr(glb_info.section, glb_info.offset)
+        var_offset = self.remap_fn()(glb_info.section, glb_info.offset)
         lf = self.tpi_stream.get_lf_from_tid(glb_info.typind)
         return lf, var_offset
 
@@ -847,7 +869,7 @@ class PDB7:
                 lf = sym
                 break
         if lf:
-            var_offset = self._secoff_to_glb_addr(lf.seg, lf.off)
+            var_offset = self.remap_fn()(lf.seg, lf.off)
             return lf, var_offset
         else:
             return None, 0
