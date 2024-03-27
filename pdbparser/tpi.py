@@ -80,6 +80,7 @@ class BasicType(NamedTuple):
     size: int = 0
     has_sign: bool = False
     is_ptr: bool = False
+    is_real: bool = False
     utype: int = -1
     # fields: list = []
 
@@ -111,9 +112,9 @@ eBaseTypes = {
     # T_BOOL16        = 0x0031,   // 16 bit boolean
     # T_BOOL32        = 0x0032,   // 32 bit boolean
     # T_BOOL64        = 0x0033,   // 64 bit boolean
-    0x0040: BasicType("T_REAL32", 4, has_sign=True),
-    0x0041: BasicType("T_REAL64", 8, has_sign=True),
-    0x0042: BasicType("T_REAL80", 10, has_sign=True),
+    0x0040: BasicType("T_REAL32", 4, has_sign=True, is_real=True),
+    0x0041: BasicType("T_REAL64", 8, has_sign=True, is_real=True),
+    0x0042: BasicType("T_REAL80", 10, has_sign=True, is_real=True),
     # T_REAL128       = 0x0043,   // 128 bit real
     # T_REAL48        = 0x0044,   // 48 bit real
     # T_REAL32PP      = 0x0045,   // 32 bit PP real

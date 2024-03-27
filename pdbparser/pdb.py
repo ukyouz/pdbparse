@@ -107,6 +107,7 @@ class StructRecord(TypedDict):
     bitsize: int | None
     fields: list[Self] | dict[str, Self] | None
     is_pointer: bool
+    is_real: bool
     has_sign: bool
     lf: Struct | None
 
@@ -122,6 +123,7 @@ def new_struct(**kwargs):
         bitsize=None,
         fields=None,
         is_pointer=False,
+        is_real=False,
         has_sign=False,
         lf=None,
     )
@@ -343,6 +345,7 @@ class TpiStream(Stream):
                 address=addr,
                 size=self.get_lf_size(lf),
                 is_pointer=lf.is_ptr,
+                is_real=lf.is_real,
                 has_sign=lf.has_sign,
                 lf=lf,
             )
