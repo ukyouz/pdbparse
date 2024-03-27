@@ -73,7 +73,7 @@ class Stream:
         hdr_cls = getattr(self.__class__, "_sHeader", self._sHeader)
         self.header = hdr_cls.parse(data)
 
-    def load_body(self, fp):
+    def load_body(self, bdata):
         """heavy loading operations goes here"""
 
 
@@ -202,10 +202,8 @@ class TpiStream(Stream):
                     else:
                         raise NotImplementedError(ref)
 
-    def load_body(self, fp):
-        data = self.getbodydata(fp)
-        arr = Array(self.header.typeIndexEnd - self.header.typeIndexBegin, tpi.sTypType)
-        types = arr.parse(data)
+    def load_body(self, bdata):
+        types = tpi.parse(bdata, self.header.typeIndexEnd - self.header.typeIndexBegin)
         type_dict = {}
         for idx, t in zip(
             range(self.header.typeIndexBegin, self.header.typeIndexEnd),
@@ -430,24 +428,23 @@ class TpiStream(Stream):
             )
 
         elif lf.leafKind == tpi.eLeafKind.LF_POINTER:
+            ref = self.get_lf_from_tid(lf.utype)
             return new_struct(
                 levelname="",
-                type=self.get_lf_tpname(lf),
+                type=self.get_lf_tpname(ref),
                 address=addr,
                 size=self.get_lf_size(lf),
                 fields=None,
-                is_pointer=self.get_lf_from_tid(lf.utype).leafKind
-                != tpi.eLeafKind.LF_PROCEDURE,
+                is_pointer=(
+                    self.get_lf_from_tid(lf.utype).leafKind
+                    != tpi.eLeafKind.LF_PROCEDURE
+                ),
+                is_funcptr=ref.leafKind == tpi.eLeafKind.LF_PROCEDURE,
                 lf=lf,
             )
 
         elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
             return self.form_structs(self.get_lf_from_tid(lf.modifiedType))
-        elif lf.leafKind == dbi.eSymKind.S_LPROC32:
-            return new_struct(
-                levelname=lf.name,
-                type=self.get_lf_tpname(lf.typind),
-            )
         else:
             raise NotImplementedError(lf)
 
@@ -566,10 +563,10 @@ class DbiStream(Stream):
     def load_header(self, fp):
         super().load_header(fp)
 
-        data = self.getbodydata(fp)
+        bdata = self.getbodydata(fp)
 
         dbiexhdrs = []
-        dbiexhdr_data = data[: self.header.module_size]
+        dbiexhdr_data = bdata[: self.header.module_size]
         _ALIGN = 4
         while dbiexhdr_data:
             h = self._DbiExHeader.parse(dbiexhdr_data)
@@ -590,7 +587,7 @@ class DbiStream(Stream):
             + self.header.tsmapSize
             + self.header.ecinfoSize
         )
-        self.dbgheader = self._DbiDbgHeader.parse(data[pos:])
+        self.dbgheader = self._DbiDbgHeader.parse(bdata[pos:])
 
 
 class DbiModule(Stream):
@@ -606,9 +603,9 @@ class DbiModule(Stream):
 
 
 class GlobalSymbolStream(Stream):
-    def load_body(self, fp):
-        data = self.getbodydata(fp)
-        globalsymbols = gdata.parse(data)
+    def load_body(self, bdata):
+        # data = self.getbodydata(fp)
+        globalsymbols = gdata.parse(bdata)
         for g in globalsymbols:
             if isinstance(g.leafKind, int):
                 kind = "s_unknown"
@@ -679,11 +676,10 @@ class GlobalSymbolStream(Stream):
 
 
 class SectionStream(Stream):
-    def load_body(self, fp):
-        data = self.getbodydata(fp)
+    def load_body(self, bdata):
         from . import pe
 
-        self.sections = pe.Sections.parse(data)
+        self.sections = pe.Sections.parse(bdata)
 
 
 class OmapStream(Stream):
@@ -782,9 +778,10 @@ class PDB7:
                 if s.dbgheader.snOmapFromSrc != -1:
                     STREAM_CLASSES[s.dbgheader.snOmapFromSrc] = OmapStream
 
-        for s in _streams:
-            s.load_body(fp)
-
+        for i, s in enumerate(_streams):
+            if isinstance(s, DbiModule):
+                continue
+            s.load_body(s.getbodydata(fp))
         self.streams = _streams
 
     @property

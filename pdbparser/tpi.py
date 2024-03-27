@@ -844,6 +844,11 @@ sCvProperty = BitStruct(
     "reserved" / BitsInteger(7),
     "scoped" / Flag,
 )
+# to speed up a little bit, reduce the fields need to be parsed
+sCvProperty = BitStruct(
+    "fwdref" / Flag,
+    "reserved" / BitsInteger(15),
+)
 
 lfEnum = "lfEnum" / Struct(
     "count" / Int16ul,
@@ -966,6 +971,11 @@ sTypType = Struct(
         ),
     ),
 )
+
+
+def parse(data, count):
+    arr = Array(count, sTypType)
+    return arr.parse(data)
 
 
 def flatten_leaf_data(lf):

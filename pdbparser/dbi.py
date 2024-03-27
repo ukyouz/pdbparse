@@ -345,3 +345,8 @@ sSymType = Struct(
         ),
     ),
 )
+
+_Syms = GreedyRange(sSymType)
+
+def parse(data):
+    return _Syms.parse(data)
