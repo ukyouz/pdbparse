@@ -35,21 +35,24 @@ sLeafKind = Enum(
     S_LPROCREF = 0x1127,  # Local Reference to a procedure
 )
 
+_pubSymFlags =  BitsSwapped(
+    BitStruct(
+        "Code" / Flag,
+        "Function" / Flag,
+        "Managed" / Flag,
+        "MSIL" / Flag,
+        Padding(28),
+    ),
+)
 
 PUBSYM32 = Struct(
-    "pubsymflags" / Union(
-        0,
-        "u32" / Int32ul,
-        "f" / BitsSwapped(
-            BitStruct(
-                "Code" / Flag,
-                "Function" / Flag,
-                "Managed" / Flag,
-                "MSIL" / Flag,
-                Padding(28),
-            ),
-        ),
-    ),
+    # to speed up a little bit, reduce the fields need to be parsed
+    "pubsymflags" / Int32ul,
+    # "pubsymflags" / Union(
+    #     0,
+    #     "u32" / Int32ul,
+    #     "f" / _pubSymFlags,
+    # ),
     "offset" / Int32ul,
     "section" / Int16ul,
     "name" / CString("utf8"),

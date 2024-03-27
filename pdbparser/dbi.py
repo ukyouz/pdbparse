@@ -314,6 +314,8 @@ CvProcFlags = BitStruct(
     "CV_PFLAG_NOINLINE" / Flag,
     "CV_PFLAG_OPTDBGINFO" / Flag,
 )
+# to speed up a little bit, reduce the fields need to be parsed
+CvProcFlags = Int8ub
 
 lfProc32 = Struct(
     "pParent" / Int32ul,

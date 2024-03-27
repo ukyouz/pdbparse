@@ -719,6 +719,8 @@ sFieldAttr = BitStruct(
     Padding(7),
     "compgenx" / Flag,
 )
+# to speed up a little bit, reduce the fields need to be parsed
+sFieldAttr = Int16ul
 
 sSubStruct = Struct(
     "leafKind" / eLeafKind,
@@ -893,42 +895,46 @@ lfUnionST = Struct(
     "name" / PascalString(Int8ub, "utf8"),
 )
 
+_PtrAttr = BitStruct(
+    "mode" / Enum(
+        BitsInteger(3),
+        PTR_MODE_PTR = 0x00000000,
+        PTR_MODE_REF = 0x00000001,
+        PTR_MODE_PMEM = 0x00000002,
+        PTR_MODE_PMFUNC = 0x00000003,
+        PTR_MODE_RESERVED = 0x00000004,
+    ),
+    "type" / Enum(
+        BitsInteger(5),
+        PTR_NEAR = 0x00000000,
+        PTR_FAR = 0x00000001,
+        PTR_HUGE = 0x00000002,
+        PTR_BASE_SEG = 0x00000003,
+        PTR_BASE_VAL = 0x00000004,
+        PTR_BASE_SEGVAL = 0x00000005,
+        PTR_BASE_ADDR = 0x00000006,
+        PTR_BASE_SEGADDR = 0x00000007,
+        PTR_BASE_TYPE = 0x00000008,
+        PTR_BASE_SELF = 0x00000009,
+        PTR_NEAR32 = 0x0000000A,
+        PTR_FAR32 = 0x0000000B,
+        PTR_64 = 0x0000000C,
+        PTR_UNUSEDPTR = 0x0000000D,
+    ),
+    Padding(3),
+    "restrict" / Flag,
+    "unaligned" / Flag,
+    "const" / Flag,
+    "volatile" / Flag,
+    "flat32" / Flag,
+    Padding(16),
+)
+# to speed up a little bit, reduce the fields need to be parsed
+_PtrAttr = Int32ul
+
 lfPointer = Struct(
     "utype" / Int32ul,
-    "ptr_attr" / BitStruct(
-        "mode" / Enum(
-            BitsInteger(3),
-            PTR_MODE_PTR = 0x00000000,
-            PTR_MODE_REF = 0x00000001,
-            PTR_MODE_PMEM = 0x00000002,
-            PTR_MODE_PMFUNC = 0x00000003,
-            PTR_MODE_RESERVED = 0x00000004,
-        ),
-        "type" / Enum(
-            BitsInteger(5),
-            PTR_NEAR = 0x00000000,
-            PTR_FAR = 0x00000001,
-            PTR_HUGE = 0x00000002,
-            PTR_BASE_SEG = 0x00000003,
-            PTR_BASE_VAL = 0x00000004,
-            PTR_BASE_SEGVAL = 0x00000005,
-            PTR_BASE_ADDR = 0x00000006,
-            PTR_BASE_SEGADDR = 0x00000007,
-            PTR_BASE_TYPE = 0x00000008,
-            PTR_BASE_SELF = 0x00000009,
-            PTR_NEAR32 = 0x0000000A,
-            PTR_FAR32 = 0x0000000B,
-            PTR_64 = 0x0000000C,
-            PTR_UNUSEDPTR = 0x0000000D,
-        ),
-        Padding(3),
-        "restrict" / Flag,
-        "unaligned" / Flag,
-        "const" / Flag,
-        "volatile" / Flag,
-        "flat32" / Flag,
-        Padding(16),
-    ),
+    "ptr_attr" / _PtrAttr,
 )
 
 lfProcedure = Struct(

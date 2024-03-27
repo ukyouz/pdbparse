@@ -715,6 +715,7 @@ class DummyOmap:
 
 class PDB7:
     def __init__(self, fp):
+        fp.seek(0)
         pdb_hdr_data = fp.read(StructPdbHeader.sizeof())
         pdb_hdr = StructPdbHeader.parse(pdb_hdr_data)
         self.header = pdb_hdr
@@ -882,8 +883,8 @@ class PDB7:
 def parse(filename) -> PDB7:
     "Open a PDB file and autodetect its version"
     with open(filename, "rb") as f:
-        sig = f.read(len(_PDB7_SIGNATURE))
         f.seek(0)
+        sig = f.read(len(_PDB7_SIGNATURE))
         if sig == _PDB7_SIGNATURE:
             pdb = PDB7(f)
             pdb.name = filename
