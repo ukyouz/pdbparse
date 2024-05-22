@@ -1,6 +1,7 @@
 from . import gdata
 import io
 import struct
+from collections import deque
 from pathlib import Path
 from contextlib import suppress
 from dataclasses import dataclass
@@ -312,7 +313,7 @@ class TpiStream(Stream):
             ]
             return "%s %s" % (" ".join(modifiers), tpname)
         elif lf.leafKind == tpi.eLeafKind.LF_ARRAY:
-            dims = []
+            dims = deque()
             item_lf = lf
             while getattr(item_lf, "leafKind", None) == tpi.eLeafKind.LF_ARRAY:
                 next_dim_lf = self.get_lf_from_tid(item_lf.elemType)
@@ -566,7 +567,7 @@ class DbiStream(Stream):
 
         bdata = self.getbodydata(fp)
 
-        dbiexhdrs = []
+        dbiexhdrs = deque()
         dbiexhdr_data = bdata[: self.header.module_size]
         _ALIGN = 4
         while dbiexhdr_data:
@@ -759,6 +760,11 @@ class PDB7:
 
         _streams = []
         for id, stream_sz in enumerate(streamSizes):
+            # Seen in some recent symbols. Not sure what the difference between this
+            # and stream_size == 0 is.
+            if stream_sz == 0xFFFFFFFF:
+                stream_sz = 0
+
             stream_pg_cnt = div_ceil(stream_sz, pdb_hdr.blockSize)
             stream_pages = list(
                 struct.unpack(
@@ -800,6 +806,14 @@ class PDB7:
 
         self.streams = _streams
         # self._addrmap_cache = {}
+
+        # sets global ARCH_PTR_SIZE
+        if dbs.header.Machine in ('IMAGE_FILE_MACHINE_I386'):
+            # print("// Architecture pointer width 4 bytes")
+            self.tpi_stream.ARCH_PTR_SIZE = 4
+        elif dbs.header.Machine in ('IMAGE_FILE_MACHINE_AMD64', 'IMAGE_FILE_MACHINE_IA64'):
+            # print("// Architecture pointer width 8 bytes")
+            self.tpi_stream.ARCH_PTR_SIZE = 8
 
     @property
     def tpi_stream(self) -> TpiStream:

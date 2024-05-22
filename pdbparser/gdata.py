@@ -1,3 +1,5 @@
+from collections import deque
+
 from construct import BitsSwapped
 from construct import BitStruct
 from construct import Bytes
@@ -130,7 +132,7 @@ def parse_stream(stream):
 
 
 def _merge_structures(con):
-    new_cons = []
+    new_cons = deque()
     for sym in con:
         lf = flatten_leaf_data(sym.symbol)
         insert_field_of_raw(lf)
