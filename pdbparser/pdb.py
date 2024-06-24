@@ -580,8 +580,8 @@ class DbiStream(Stream):
                 sz = sz + (_ALIGN - (sz % _ALIGN))
             dbiexhdr_data = dbiexhdr_data[sz:]
         self.exheaders = dbiexhdrs
-        pdb_drive = Path(fp.name).anchor
-        self.mymod_indexes = [i for i, h in enumerate(dbiexhdrs) if Path(h.modName).anchor == pdb_drive]
+        pdb_folder = str(Path(fp.name).parent)
+        self.mymod_indexes = [i for i, h in enumerate(dbiexhdrs) if h.objName.startswith(pdb_folder)]
 
         pos = (
             self.header.module_size
