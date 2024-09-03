@@ -1,6 +1,7 @@
 from . import gdata
 import io
 import struct
+import itertools
 from collections import deque
 from pathlib import Path
 from contextlib import suppress
@@ -315,9 +316,10 @@ class TpiStream(Stream):
         elif lf.leafKind == tpi.eLeafKind.LF_ARRAY:
             dims = deque()
             item_lf = lf
+            item_size = self.get_lf_size(item_lf)
             while getattr(item_lf, "leafKind", None) == tpi.eLeafKind.LF_ARRAY:
                 next_dim_lf = self.get_lf_from_tid(item_lf.elemType)
-                dims.append(self.get_lf_size(item_lf) // self.get_lf_size(next_dim_lf))
+                dims.append(item_size // self.get_lf_size(next_dim_lf))
                 item_lf = next_dim_lf
             structname = self.get_lf_tpname(item_lf)
             if structname.endswith("*"):
@@ -378,7 +380,8 @@ class TpiStream(Stream):
 
         elif lf.leafKind == tpi.eLeafKind.LF_ARRAY:
             elem_lf = self.get_lf_from_tid(lf.elemType)
-            count = self.get_lf_size(lf) // self.get_lf_size(elem_lf)
+            elem_size = self.get_lf_size(elem_lf)
+            count = self.get_lf_size(lf) // elem_size
 
             struct = new_struct(
                 levelname=lf.name,
@@ -389,8 +392,7 @@ class TpiStream(Stream):
                 lf=lf,
             )
             if recursive or _depth == 0:
-                for i in range(count):
-                    off = i * self.get_lf_size(elem_lf)
+                for i, off in zip(range(count), itertools.count(0, elem_size)):
                     elem_s = self.form_structs(
                         elem_lf, addr + off, recursive, _depth + 1
                     )
