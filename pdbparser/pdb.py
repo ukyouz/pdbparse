@@ -59,7 +59,7 @@ class Stream:
     pages: list[int]
     _sHeader: Struct = field(default_factory=Struct)
 
-    def getdata(self, fp) -> bytes:
+    def getdata(self, fp) -> memoryview:
         data = BytesIO()
         for p in self.pages:
             fp.seek(p * self.page_sz)
@@ -74,6 +74,15 @@ class Stream:
     def load_header(self, fp):
         data = self.getdata(fp)
         hdr_cls = getattr(self.__class__, "_sHeader", self._sHeader)
+        if data.nbytes == 0:
+            obj = {}
+            for sc in hdr_cls.subcons:
+                if isinstance(sc.subcon, Const):
+                    obj[sc.name] = sc.subcon.value
+                else:
+                    obj[sc.name] = 0
+            self.header = hdr_cls.parse(hdr_cls.build(obj))
+            return
         self.header = hdr_cls.parse(data)
 
     def load_body(self, bdata):
@@ -295,7 +304,7 @@ class TpiStream(Stream):
             return lf.name
         elif lf.leafKind == tpi.eLeafKind.LF_POINTER:
             ref = self.get_lf_from_tid(lf.utype)
-            if ref.leafKind == tpi.eLeafKind.LF_PROCEDURE:
+            if getattr(ref, "leafKind", "") == tpi.eLeafKind.LF_PROCEDURE:
                 return self.get_lf_tpname(ref)
             return "%s *" % self.get_lf_tpname(ref)
         elif lf.leafKind == tpi.eLeafKind.LF_ENUM:
@@ -352,6 +361,7 @@ class TpiStream(Stream):
                 has_sign=lf.has_sign,
                 lf=lf,
             )
+
         elif lf.leafKind in {
             tpi.eLeafKind.LF_CLASS,
             tpi.eLeafKind.LF_STRUCTURE,
@@ -367,8 +377,10 @@ class TpiStream(Stream):
                 fields={},
                 lf=lf,
             )
-            if recursive or _depth == 0:
+            if (recursive or _depth == 0) and not lf.name.startswith("std::"):
                 for member_lf in self.get_lf_from_tid(lf.fields).fields:
+                    if member_lf.leafKind == tpi.eLeafKind.LF_METHOD:
+                        continue
                     mem_struct = self.form_structs(
                         member_lf, addr, recursive, _depth + 1
                     )
@@ -443,12 +455,18 @@ class TpiStream(Stream):
                 size=self.get_lf_size(lf),
                 fields=None,
                 is_pointer=True,
-                is_funcptr=ref.leafKind == tpi.eLeafKind.LF_PROCEDURE,
+                is_funcptr=getattr(ref, "leafKind", "") == tpi.eLeafKind.LF_PROCEDURE,
                 lf=lf,
             )
 
+        elif lf.leafKind == tpi.eLeafKind.LF_STMEMBER:
+            ref = self.get_lf_from_tid(lf.index)
+            return self.form_structs(ref)
+
         elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
-            return self.form_structs(self.get_lf_from_tid(lf.modifiedType))
+            ref = self.get_lf_from_tid(lf.modifiedType)
+            return self.form_structs(ref)
+
         else:
             raise NotImplementedError(lf)
 
@@ -593,7 +611,10 @@ class DbiStream(Stream):
             + self.header.tsmapSize
             + self.header.ecinfoSize
         )
-        self.dbgheader = self._DbiDbgHeader.parse(bdata[pos:])
+        if pos == 0:
+            self.dbgheader = self._DbiDbgHeader.parse(bytes(self._DbiDbgHeader.sizeof()))
+        else:
+            self.dbgheader = self._DbiDbgHeader.parse(bdata[pos:])
 
 
 class DbiModule(Stream):
@@ -768,10 +789,11 @@ class PDB7:
                 stream_sz = 0
 
             stream_pg_cnt = div_ceil(stream_sz, pdb_hdr.blockSize)
+            unpack_data = root_pages_data.read(stream_pg_cnt * U32_SZ)
             stream_pages = list(
                 struct.unpack(
                     "<" + ("%sI" % stream_pg_cnt),
-                    root_pages_data.read(stream_pg_cnt * U32_SZ),
+                    unpack_data,
                 )
             )
             s = STREAM_CLASSES.get(id, Stream)(

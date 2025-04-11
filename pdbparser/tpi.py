@@ -67,6 +67,7 @@ FieldsRefAttrs = {
     "LF_NESTTYPE": ["type"],
     "LF_ONEMETHOD": ["index"],
     "LF_VFUNCTAB": ["type"],
+    "LF_STMEMBER": ["index"],
 }
 
 
@@ -795,6 +796,11 @@ sSubStruct = Struct(
                 "name" / CString(encoding = "utf8"),
                 "_pad" / Peek(Int8ul),
                 PadAlign,
+            ),
+            "LF_STMEMBER": Struct(
+                "attr" / sFieldAttr,
+                "index" / Int32ul,
+                "name" / CString(encoding = "utf8"),
             ),
         },
     ),
