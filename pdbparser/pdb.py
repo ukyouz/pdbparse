@@ -461,11 +461,11 @@ class TpiStream(Stream):
 
         elif lf.leafKind == tpi.eLeafKind.LF_STMEMBER:
             ref = self.get_lf_from_tid(lf.index)
-            return self.form_structs(ref)
+            return self.form_structs(ref, addr)
 
         elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
             ref = self.get_lf_from_tid(lf.modifiedType)
-            return self.form_structs(ref)
+            return self.form_structs(ref, addr)
 
         else:
             raise NotImplementedError(lf)
