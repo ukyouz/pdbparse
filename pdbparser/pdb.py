@@ -286,7 +286,7 @@ class TpiStream(Stream):
         elif lf.leafKind == tpi.eLeafKind.LF_BITFIELD:
             return self.get_lf_from_tid(lf.baseType).size
         elif lf.leafKind == tpi.eLeafKind.LF_MODIFIER:
-            return self.get_lf_size(lf.modifiedType)
+            return self.get_lf_size(self.get_lf_from_tid(lf.modifiedType))
         else:
             return -1
 
