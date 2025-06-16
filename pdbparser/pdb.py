@@ -448,6 +448,15 @@ class TpiStream(Stream):
 
         elif lf.leafKind == tpi.eLeafKind.LF_POINTER:
             ref = self.get_lf_from_tid(lf.utype)
+            funcptr = deref_str = ""
+            while lk := getattr(ref, "leafKind", ""):
+                if lk == tpi.eLeafKind.LF_PROCEDURE:
+                    funcptr = "fptr" + deref_str
+                    break
+                if lk != tpi.eLeafKind.LF_POINTER:
+                    break
+                ref = self.get_lf_from_tid(ref.utype)
+                deref_str += "*"
             return new_struct(
                 levelname="",
                 type=self.get_lf_tpname(lf),
@@ -455,7 +464,7 @@ class TpiStream(Stream):
                 size=self.get_lf_size(lf),
                 fields=None,
                 is_pointer=True,
-                is_funcptr=getattr(ref, "leafKind", "") == tpi.eLeafKind.LF_PROCEDURE,
+                is_funcptr=funcptr,
                 lf=lf,
             )
 
@@ -600,7 +609,20 @@ class DbiStream(Stream):
                 sz = sz + (_ALIGN - (sz % _ALIGN))
             dbiexhdr_data = dbiexhdr_data[sz:]
         self.exheaders = dbiexhdrs
-        pdb_folder = str(Path(fp.name).parent)
+
+        def _find_root(f: Path) -> Path:
+            markers = (
+                 ".git",
+                 ".root",
+                 ".svn",
+                 ".vscode",
+            )
+            for p in f.parents:
+                if any((p / m).exists() for m in markers):
+                    return p
+            return f
+
+        pdb_folder = str(_find_root(Path(fp.name)))
         self.mymod_indexes = [i for i, h in enumerate(dbiexhdrs) if h.objName.startswith(pdb_folder)]
 
         pos = (
