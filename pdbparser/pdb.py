@@ -2,6 +2,7 @@ from . import gdata
 import io
 import struct
 import itertools
+import pickle
 from collections import deque
 from pathlib import Path
 from contextlib import suppress
@@ -328,7 +329,9 @@ class TpiStream(Stream):
             item_size = self.get_lf_size(item_lf)
             while getattr(item_lf, "leafKind", None) == tpi.eLeafKind.LF_ARRAY:
                 next_dim_lf = self.get_lf_from_tid(item_lf.elemType)
-                dims.append(item_size // self.get_lf_size(next_dim_lf))
+                count = item_size // self.get_lf_size(next_dim_lf)
+                dims.append(count)
+                item_size //= count
                 item_lf = next_dim_lf
             structname = self.get_lf_tpname(item_lf)
             if structname.endswith("*"):
@@ -404,12 +407,29 @@ class TpiStream(Stream):
                 lf=lf,
             )
             if recursive or _depth == 0:
-                for i, off in zip(range(count), itertools.count(0, elem_size)):
-                    elem_s = self.form_structs(
-                        elem_lf, addr + off, recursive, _depth + 1
-                    )
+                def _shift_addr(s, offset):
+                    s["address"] += offset
+                    if isinstance(s["fields"], list):
+                        for c in s["fields"]:
+                            _shift_addr(c, offset)
+                    elif isinstance(s["fields"], dict):
+                        for c in s["fields"].values():
+                            _shift_addr(c, offset)
+                elem_first = self.form_structs(
+                    elem_lf, addr, recursive, _depth + 1
+                )
+                elem_f = pickle.dumps(elem_first)
+                struct["fields"] = [pickle.loads(elem_f) for _ in range(min(count, 1024))]
+                for i, (elem_s, off) in enumerate(zip(struct["fields"], itertools.count(0, elem_size))):
                     elem_s["levelname"] = "[%d]" % i
-                    struct["fields"].append(elem_s)
+                    _shift_addr(elem_s, off)
+                if count > 1024:
+                    elem_remains = pickle.loads(elem_f)
+                    elem_remains["levelname"] = "[1024..%d]" % count
+                    elem_remains["type"] +=  "..."
+                    elem_remains["address"] += 1024 * elem_size
+                    elem_remains["size"] *= count - 1024
+                    struct["fields"].append(elem_remains)
             return struct
 
         elif lf.leafKind == tpi.eLeafKind.LF_MEMBER:
