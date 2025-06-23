@@ -119,6 +119,7 @@ class StructRecord(TypedDict):
     bitsize: int | None
     fields: list[Self] | dict[str, Self] | None
     is_pointer: bool
+    is_funcptr: str
     is_real: bool
     has_sign: bool
     lf: Struct | None
@@ -135,6 +136,7 @@ def new_struct(**kwargs):
         bitsize=None,
         fields=None,
         is_pointer=False,
+        is_funcptr="",
         is_real=False,
         has_sign=False,
         lf=None,
@@ -176,7 +178,7 @@ class TpiStream(Stream):
                 tpi.eLeafKind.LF_STRUCTURE_ST,
                 tpi.eLeafKind.LF_UNION,
                 tpi.eLeafKind.LF_UNION_ST,
-            }
+            } and not t.name.startswith("std::")
         }
 
     def get_lf_from_tid(self, ref: int):
